@@ -1,0 +1,185 @@
+import os
+from datetime import datetime
+from typing import Optional
+from git import Repo, InvalidGitRepositoryError, GitCommandError
+from git.exc import NoSuchPathError
+
+
+class GitServiceError(Exception):
+    pass
+
+
+class GitService:
+
+    @staticmethod
+    def init_repo(project_path: str, branch: str = "main") -> Repo:
+        try:
+            repo = Repo(project_path)
+        except InvalidGitRepositoryError:
+            repo = Repo.init(project_path, initial_branch=branch)
+
+        if not repo.head.is_valid():
+            gitignore_path = os.path.join(project_path, ".gitignore")
+            if not os.path.exists(gitignore_path):
+                try:
+                    with open(gitignore_path, "w") as f:
+                        f.write("*.pyc\n__pycache__/\n.env\n.venv/\nvenv/\n")
+                except Exception:
+                    pass
+            try:
+                repo.index.add([".gitignore"])
+                repo.index.commit("Initial commit")
+            except Exception:
+                pass
+
+        try:
+            active = repo.active_branch
+            if active.name != branch:
+                repo.git.branch("-M", branch)
+        except TypeError:
+            repo.git.branch("-M", branch)
+
+        return repo
+
+    @staticmethod
+    def get_changed_files(project_path: str) -> list[dict]:
+        repo = GitService.init_repo(project_path)
+        changes = []
+
+        if repo.is_dirty(untracked_files=True):
+            diff = repo.index.diff(None)
+            for d in diff:
+                changes.append({"path": d.a_path, "status": "modified"})
+            untracked = repo.untracked_files
+            for u in untracked:
+                changes.append({"path": u, "status": "created"})
+
+        if repo.head.is_valid():
+            try:
+                for d in repo.head.commit.diff("HEAD~1"):
+                    status = "deleted" if d.change_type == "D" else "modified"
+                    changes.append({"path": d.b_path or d.a_path, "status": status})
+            except Exception:
+                pass
+
+        seen = set()
+        unique = []
+        for c in changes:
+            key = c["path"]
+            if key not in seen:
+                seen.add(key)
+                unique.append(c)
+        return unique
+
+    @staticmethod
+    def _ensure_remote(repo: Repo, repo_url: str, token: str, branch: str) -> None:
+        auth_url = repo_url.replace("https://", f"https://{token}@")
+        if "origin" in [r.name for r in repo.remotes]:
+            origin = repo.remotes.origin
+            origin.set_url(auth_url)
+            try:
+                origin.pull(rebase=True)
+            except GitCommandError:
+                pass
+        else:
+            origin = repo.create_remote("origin", auth_url)
+        origin.set_url(repo_url)
+
+    @staticmethod
+    def _do_push(repo: Repo, repo_url: str, token: str, branch: str) -> None:
+        origin = repo.remotes.origin
+        auth_url = repo_url.replace("https://", f"https://{token}@")
+        origin.set_url(auth_url)
+
+        try:
+            push_info = origin.push(refspec=f"{branch}:{branch}")
+            if push_info and push_info[0] and push_info[0].flags & 128:
+                raise GitServiceError(f"Push rejected: {push_info[0].summary}")
+        except GitCommandError as e:
+            raise GitServiceError(f"Push failed: {e}")
+        finally:
+            origin.set_url(repo_url)
+
+    @staticmethod
+    def commit_and_push(
+        project_path: str,
+        token: str,
+        repo_url: str,
+        project_name: str = "",
+        branch: str = "main",
+    ) -> dict:
+        repo = GitService.init_repo(project_path, branch)
+        GitService._ensure_remote(repo, repo_url, token, branch)
+
+        repo.git.add(A=True)
+
+        if not repo.index.diff("HEAD"):
+            return {"changed": False, "message": "No changes to commit."}
+
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        name_part = f" [{project_name}]" if project_name else ""
+        commit_msg = f"Update files{name_part} — {timestamp}"
+        commit = repo.index.commit(commit_msg)
+
+        GitService._do_push(repo, repo_url, token, branch)
+
+        files_changed = (
+            len(repo.head.commit.diff(repo.head.commit.parents[0]))
+            if repo.head.commit.parents
+            else 1
+        )
+
+        return {
+            "changed": True,
+            "files_changed": files_changed,
+            "commit_hash": commit.hexsha[:7],
+            "message": "Push successful.",
+        }
+
+    @staticmethod
+    def batch_commit_and_push(
+        project_path: str,
+        token: str,
+        repo_url: str,
+        files: list[dict],
+        project_name: str = "",
+        branch: str = "main",
+    ) -> dict:
+        if not files:
+            return {"changed": False, "message": "No files to push.", "files_count": 0}
+
+        repo = GitService.init_repo(project_path, branch)
+        GitService._ensure_remote(repo, repo_url, token, branch)
+
+        rel_paths = [f["relative"] for f in files]
+        repo.index.add(rel_paths)
+
+        commit_hash = None
+        if repo.index.diff("HEAD"):
+            timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            name_part = f" [{project_name}]" if project_name else ""
+            commit_msg = f"Update {len(files)} files{name_part} — {timestamp}"
+            try:
+                commit = repo.index.commit(commit_msg)
+                commit_hash = commit.hexsha[:7]
+            except GitCommandError:
+                pass
+
+        if commit_hash:
+            GitService._do_push(repo, repo_url, token, branch)
+
+        return {
+            "changed": commit_hash is not None,
+            "files_changed": len(files) if commit_hash else 0,
+            "commit_hash": commit_hash,
+            "files_count": len(files),
+            "message": "Push successful." if commit_hash else "Files already synced.",
+        }
+
+    @staticmethod
+    def has_remote(project_path: str) -> bool:
+        try:
+            repo = Repo(project_path)
+            return "origin" in [r.name for r in repo.remotes]
+        except (InvalidGitRepositoryError, NoSuchPathError):
+            return False

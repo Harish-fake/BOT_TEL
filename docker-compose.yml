@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  gitsync-bot:
+    build: .
+    container_name: gitsync-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./storage:/app/storage
+      - ./database:/app/database
