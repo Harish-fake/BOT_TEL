@@ -1,4 +1,5 @@
 import logging
+import time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 
@@ -7,6 +8,7 @@ from project_manager import ProjectManager, ProjectManagerError
 from github_manager import GitHubManager, GitHubManagerError
 from scheduler import scheduler_manager
 from services.encryption_service import EncryptionService
+from services.git_service import GitService, GitServiceError
 from services.report_service import ReportService
 from services.file_tracker import FileTracker
 
@@ -137,29 +139,67 @@ async def receive_repo_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
         ProjectManager.link_github(project_id, account_id, url)
 
-        DEFAULT_INTERVAL = "interval:4"
-        ProjectManager.set_schedule(project_id, DEFAULT_INTERVAL)
-        scheduler_manager.add_job(project_id, DEFAULT_INTERVAL)
+        # Push ALL pending files immediately (initial sync)
+        project_path = project["project_path"]
+        all_pending = FileTracker.get_pending_files(project_path, project_id)
 
-        progress = FileTracker.get_progress(project["project_path"], project_id)
+        push_result = None
+        if all_pending:
+            await status_msg.edit_text("🔄 Pushing all files to GitHub...")
+            push_result = GitService.batch_commit_and_push(
+                project_path,
+                token,
+                url,
+                all_pending,
+                project_name=project["project_name"],
+            )
+            if push_result.get("commit_hash"):
+                FileTracker.record_pushed(project_id, all_pending)
+                ProjectManager.record_push(project_id)
+                ProjectManager.log_sync(
+                    project_id, "success",
+                    files_changed=push_result.get("files_changed", 0),
+                    commit_hash=push_result["commit_hash"],
+                )
 
-        await status_msg.edit_text(
-            f"✅ *GitHub Integration Successful!*\n\n"
-            f"Repository: `{url}`\n"
-            f"Branch: `{result['branch']}`\n"
-            f"Total files to upload: {progress['total']}\n\n"
-            f"⏰ *Auto-sync started!*\n"
-            f"Pushing files in batches of 4 every 4 hours (from now).\n"
-            f"Next batch at approximately {scheduler_manager.get_next_run_time(project_id)}\n"
-            f"Progress: 0/{progress['total']} files\n\n"
-            f"📬 You will receive an update after each batch.\n"
-            f"Use /status to check progress anytime.\n"
-            f"Use /schedule to change the frequency.",
-            parse_mode="Markdown",
-        )
+        # Keep existing schedule if user set one, otherwise default to interval:1
+        existing = db.get_schedule_by_project(project_id)
+        if existing and existing.get("cron_expression"):
+            schedule_expr = existing["cron_expression"]
+        else:
+            schedule_expr = "interval:1"
+            ProjectManager.set_schedule(project_id, schedule_expr)
+        scheduler_manager.add_job(project_id, schedule_expr)
+
+        progress = FileTracker.get_progress(project_path, project_id)
+        pushed_count = progress["pushed"]
+        total = progress["total"]
+        remaining = progress["remaining"]
+
+        lines = [
+            f"✅ *GitHub Integration Successful!*",
+            f"Repository: `{url}`",
+            f"Branch: `{result['branch']}`",
+            f"",
+        ]
+        if push_result and push_result.get("commit_hash"):
+            lines.append(f"📤 Pushed {len(all_pending)} files.")
+            lines.append(f"Commit: `{push_result['commit_hash']}`")
+        lines.append(f"")
+        lines.append(f"📊 *Progress:* {pushed_count}/{total} files ({progress['percent']:.0f}%)")
+        if remaining > 0:
+            lines.append(f"Remaining: ~{remaining} files")
+            lines.append(f"⏰ Next batch: {scheduler_manager.get_next_run_time(project_id)}")
+        else:
+            lines.append(f"✅ All files pushed to GitHub!")
+        lines.append(f"Use /status to track progress.")
+
+        await status_msg.edit_text("\n".join(lines), parse_mode="Markdown")
 
     except GitHubManagerError as e:
         await status_msg.edit_text(f"❌ GitHub setup failed: {e}")
+    except GitServiceError as e:
+        await status_msg.edit_text(f"❌ Initial push failed: {e}")
     except Exception as e:
         logger.exception("GitHub init error")
         await status_msg.edit_text(f"❌ Unexpected error: {e}")
