@@ -52,27 +52,37 @@ async def receive_zip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return WAITING_FOR_ZIP
 
     status_msg = await update.message.reply_text("⬇️ Downloading ZIP file...")
+    actual_mb = 0.0
 
     try:
-        if document.file_size and document.file_size > 50 * 1024 * 1024:
+        file = await document.get_file(read_timeout=300)
+        actual_mb = (file.file_size or 0) / (1024 * 1024)
+
+        if file.file_size and file.file_size > 50 * 1024 * 1024:
             await status_msg.edit_text(
-                "❌ File too large (over 50 MB). Telegram's bot API doesn't support "
-                "downloading files larger than 50 MB.\n\n"
-                "Please split your project into smaller ZIPs (under 50 MB each)."
+                f"❌ File too large ({actual_mb:.1f} MB).\n"
+                "Telegram's bot API has a 50 MB download limit.\n\n"
+                "Please split your ZIP into smaller parts (under 50 MB each)."
             )
             return ConversationHandler.END
 
-        file = await document.get_file(read_timeout=300)
         temp_dir = os.path.join("storage", "temp")
         os.makedirs(temp_dir, exist_ok=True)
         zip_path = os.path.join(temp_dir, f"{uuid.uuid4().hex}_{document.file_name}")
-        await file.download_to_drive(custom_path=zip_path, read_timeout=300, write_timeout=300)
+
+        await file.download_to_drive(
+            custom_path=zip_path,
+            read_timeout=600,
+            write_timeout=600,
+            connect_timeout=60,
+        )
     except Exception as e:
-        err = str(e)
-        if "too big" in err.lower() or "413" in err:
+        err = str(e).lower()
+        if "too big" in err or "413" in err:
             await status_msg.edit_text(
-                "❌ File too large. Telegram's bot API has a 50 MB download limit.\n"
-                "Please split your project into smaller ZIP files (under 50 MB each)."
+                f"❌ Download failed: Telegram API says file is too large "
+                f"(limit is ~50 MB). Your file was {actual_mb:.1f} MB.\n"
+                "Please split your ZIP into smaller parts."
             )
         else:
             await status_msg.edit_text(f"❌ Download failed: {err}")
