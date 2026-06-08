@@ -12,3 +12,9 @@ node_modules/
 .DS_Store
 Thumbs.db
 desktop.ini
+database/bot.db*
+storage/projects/
+storage/logs/
+storage/temp/
+*.db-shm
+*.db-wal
