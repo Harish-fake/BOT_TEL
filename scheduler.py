@@ -1,7 +1,9 @@
 import logging
+from datetime import datetime
 from typing import Optional, Callable
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from database import db
 from config import config
@@ -59,9 +61,14 @@ class SchedulerManager:
         self.scheduler.shutdown(wait=False)
         logger.info("Scheduler stopped.")
 
-    def add_job(self, project_id: int, cron_expression: str) -> str:
+    def add_job(self, project_id: int, expression: str) -> str:
         job_id = f"sync_project_{project_id}"
-        trigger = CronTrigger.from_crontab(cron_expression)
+
+        if expression.startswith("interval:"):
+            hours = int(expression.split(":")[1])
+            trigger = IntervalTrigger(hours=hours)
+        else:
+            trigger = CronTrigger.from_crontab(expression)
 
         self.scheduler.add_job(
             _job_executor,
@@ -71,7 +78,7 @@ class SchedulerManager:
             replace_existing=True,
             kwargs={"project_id": project_id},
         )
-        logger.info(f"Added schedule job {job_id} with cron: {cron_expression}")
+        logger.info(f"Added schedule job {job_id}: {expression}")
         return job_id
 
     def remove_job(self, project_id: int) -> None:
@@ -87,7 +94,9 @@ class SchedulerManager:
         try:
             job = self.scheduler.get_job(job_id)
             if job and job.next_run_time:
-                return job.next_run_time.strftime("%Y-%m-%d %H:%M:%S IST")
+                t = job.next_run_time
+                ampm = t.strftime("%I:%M %p").lstrip("0")
+                return f"{ampm} IST"
         except Exception:
             pass
         return None
@@ -103,9 +112,9 @@ class SchedulerManager:
         schedules = db.get_all_enabled_schedules()
         for sched in schedules:
             project_id = sched["project_id"]
-            cron_expr = sched["cron_expression"]
-            if cron_expr:
-                self.add_job(project_id, cron_expr)
+            expr = sched["cron_expression"]
+            if expr:
+                self.add_job(project_id, expr)
         logger.info(f"Rescheduled {len(schedules)} jobs from database.")
 
 

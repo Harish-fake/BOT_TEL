@@ -137,9 +137,9 @@ async def receive_repo_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
         ProjectManager.link_github(project_id, account_id, url)
 
-        DEFAULT_CRON = "0 */4 * * *"
-        ProjectManager.set_schedule(project_id, DEFAULT_CRON)
-        scheduler_manager.add_job(project_id, DEFAULT_CRON)
+        DEFAULT_INTERVAL = "interval:4"
+        ProjectManager.set_schedule(project_id, DEFAULT_INTERVAL)
+        scheduler_manager.add_job(project_id, DEFAULT_INTERVAL)
 
         progress = FileTracker.get_progress(project["project_path"], project_id)
 
@@ -149,7 +149,8 @@ async def receive_repo_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             f"Branch: `{result['branch']}`\n"
             f"Total files to upload: {progress['total']}\n\n"
             f"⏰ *Auto-sync started!*\n"
-            f"Pushing files in batches of 4 every 4 hours (IST).\n"
+            f"Pushing files in batches of 4 every 4 hours (from now).\n"
+            f"Next batch at approximately {scheduler_manager.get_next_run_time(project_id)}\n"
             f"Progress: 0/{progress['total']} files\n\n"
             f"📬 You will receive an update after each batch.\n"
             f"Use /status to check progress anytime.\n"

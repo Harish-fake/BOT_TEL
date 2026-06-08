@@ -18,7 +18,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "1️⃣ *Add a GitHub account* — /addaccount (store your token)\n"
         "2️⃣ *Upload a project* — /upload (send a ZIP file)\n"
         "3️⃣ *Link to GitHub* — /github (connect project to a repo)\n"
-        "4️⃣ *Auto-sync starts* — pushes 4 files every 4 hours (IST)\n\n"
+        "4️⃣ *Auto-sync starts* — pushes 4 files every 4 hours (counts from now)\n\n"
         "📊 Check progress anytime with /status\n"
         "🔄 Change sync frequency with /schedule\n"
         "⏸ Pause with /pause, resume with /resume\n"

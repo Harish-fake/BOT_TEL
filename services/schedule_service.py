@@ -68,12 +68,11 @@ class ScheduleService:
         return None
 
     @staticmethod
-    def describe_cron(cron_expr: str) -> str:
+    def describe_cron(expr: str) -> str:
+        if expr.startswith("interval:"):
+            hours = expr.split(":")[1]
+            return f"Every {hours} hours (from connection time)"
         descriptions: dict[str, str] = {
-            "0 */4 * * *": "Every 4 hours (IST)",
-            "0 */6 * * *": "Every 6 hours (IST)",
-            "0 */12 * * *": "Every 12 hours (IST)",
-            "0 0 * * *": "Daily at midnight (IST)",
             "30 6 * * *": "Daily at 6:30 AM IST",
             "30 9 * * *": "Daily at 9:30 AM IST",
             "0 12 * * *": "Daily at 12:00 PM IST",
@@ -82,6 +81,5 @@ class ScheduleService:
             "30 9 * * 1": "Every Monday at 9:30 AM IST",
             "30 9 * * 3": "Every Wednesday at 9:30 AM IST",
             "30 9 * * 5": "Every Friday at 9:30 AM IST",
-            "0 * * * *": "Every hour (IST)",
         }
-        return descriptions.get(cron_expr, f"Cron: `{cron_expr}` (IST)")
+        return descriptions.get(expr, f"Cron: `{expr}` (IST)")
