@@ -541,15 +541,26 @@ def main() -> None:
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, fallback_message))
 
-    # Error handler
+    # Error handler — suppress conflict errors from Render deploy overlaps
     async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+        err = str(context.error)
+        if "Conflict" in err and "terminated" in err:
+            logger.debug("Bot conflict during deploy overlap — will retry.")
+            return
         logger.error(f"Update {update} caused error {context.error}")
 
     application.add_error_handler(error_handler)
 
     logger.info("GitSync Bot starting. Polling for updates...")
 
-    application.run_polling(allowed_updates=Update.ALL_TYPES, bootstrap_retries=5)
+    import time
+    time.sleep(5)
+
+    application.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+        bootstrap_retries=5,
+    )
 
 
 if __name__ == "__main__":
