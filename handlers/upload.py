@@ -54,13 +54,29 @@ async def receive_zip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     status_msg = await update.message.reply_text("⬇️ Downloading ZIP file...")
 
     try:
-        file = await document.get_file()
-        file_bytes = await file.download_as_bytearray()
-    except Exception as e:
-        await status_msg.edit_text(f"❌ Download failed: {e}")
-        return ConversationHandler.END
+        if document.file_size and document.file_size > 50 * 1024 * 1024:
+            await status_msg.edit_text(
+                "❌ File too large (over 50 MB). Telegram's bot API doesn't support "
+                "downloading files larger than 50 MB.\n\n"
+                "Please split your project into smaller ZIPs (under 50 MB each)."
+            )
+            return ConversationHandler.END
 
-    zip_path = ZipService.save_temp_file(bytes(file_bytes), document.file_name)
+        file = await document.get_file(read_timeout=300)
+        temp_dir = os.path.join("storage", "temp")
+        os.makedirs(temp_dir, exist_ok=True)
+        zip_path = os.path.join(temp_dir, f"{uuid.uuid4().hex}_{document.file_name}")
+        await file.download_to_drive(custom_path=zip_path, read_timeout=300, write_timeout=300)
+    except Exception as e:
+        err = str(e)
+        if "too big" in err.lower() or "413" in err:
+            await status_msg.edit_text(
+                "❌ File too large. Telegram's bot API has a 50 MB download limit.\n"
+                "Please split your project into smaller ZIP files (under 50 MB each)."
+            )
+        else:
+            await status_msg.edit_text(f"❌ Download failed: {err}")
+        return ConversationHandler.END
 
     try:
         await status_msg.edit_text("🔍 Validating ZIP...")
