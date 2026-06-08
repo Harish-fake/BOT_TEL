@@ -141,29 +141,35 @@ async def scheduled_sync(project_id: int) -> None:
 
         _synced_notified.discard(project_id)
         commit_str = result.get("commit_hash")
-        FileTracker.record_pushed(project_id, batch)
-        ProjectManager.record_push(project["id"])
-        ProjectManager.log_sync(
-            project["id"],
-            "success",
-            files_changed=result.get("files_changed", 0),
-            commit_hash=commit_str,
-            duration_ms=int(duration * 1000),
-        )
 
-        progress = FileTracker.get_progress(project_path, project_id)
-        commit_line = f"Commit: `{commit_str}`\n" if commit_str else ""
-        report = (
-            f"✅ Synced {len(batch)} files [{project_name}]\n"
-            f"{commit_line}"
-            f"Duration: {duration:.1f}s\n"
-            f"Progress: {progress['pushed']}/{progress['total']} files "
-            f"({progress['percent']:.0f}%)"
-        )
-        if progress["remaining"] > 0:
-            next_run = scheduler_manager.get_next_run_time(project_id)
-            report += f"\nRemaining: ~{progress['remaining']} files"
-            report += f"\nNext batch: {next_run or 'next schedule tick'}"
+        if commit_str:
+            FileTracker.record_pushed(project_id, batch)
+            ProjectManager.record_push(project["id"])
+            ProjectManager.log_sync(
+                project["id"], "success",
+                files_changed=result.get("files_changed", 0),
+                commit_hash=commit_str,
+                duration_ms=int(duration * 1000),
+            )
+
+            progress = FileTracker.get_progress(project_path, project_id)
+            report = (
+                f"✅ Synced {len(batch)} files [{project_name}]\n"
+                f"Commit: `{commit_str}`\n"
+                f"Duration: {duration:.1f}s\n"
+                f"Progress: {progress['pushed']}/{progress['total']} files "
+                f"({progress['percent']:.0f}%)"
+            )
+            if progress["remaining"] > 0:
+                next_run = scheduler_manager.get_next_run_time(project_id)
+                report += f"\nRemaining: ~{progress['remaining']} files"
+                report += f"\nNext batch: {next_run or 'next schedule tick'}"
+        else:
+            ProjectManager.log_sync(
+                project["id"], "no_changes",
+                duration_ms=int(duration * 1000),
+            )
+            report = f"ℹ️ No changes to push for {project_name}."
 
         user = db.get_user(project["user_id"])
         if user:

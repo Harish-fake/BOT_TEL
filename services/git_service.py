@@ -76,14 +76,22 @@ class GitService:
         auth_url = repo_url.replace("https://", f"https://{token}@")
         if "origin" in [r.name for r in repo.remotes]:
             origin = repo.remotes.origin
-            origin.set_url(auth_url)
+            current_url = origin.url
+            if "https://" in current_url and "@" not in current_url:
+                origin.set_url(auth_url)
             try:
-                origin.pull(rebase=True)
+                origin.fetch()
+                if repo.head.is_valid():
+                    try:
+                        repo.git.rebase(f"origin/{branch}")
+                    except GitCommandError:
+                        repo.git.merge(f"origin/{branch}", "--no-edit")
             except GitCommandError:
                 pass
         else:
             origin = repo.create_remote("origin", auth_url)
-        origin.set_url(repo_url)
+        if origin.url != repo_url:
+            origin.set_url(repo_url)
 
     @staticmethod
     def _do_push(repo: Repo, repo_url: str, token: str, branch: str) -> None:
@@ -155,10 +163,19 @@ class GitService:
         repo.index.add(rel_paths)
 
         commit_hash = None
-        if repo.index.diff("HEAD"):
+        has_diff = bool(repo.index.diff("HEAD"))
+
+        if not has_diff and repo.untracked_files:
+            extra = [f for f in repo.untracked_files if f not in rel_paths]
+            if extra:
+                repo.index.add(extra)
+                rel_paths.extend(extra)
+                has_diff = bool(repo.index.diff("HEAD"))
+
+        if has_diff:
             timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
             name_part = f" [{project_name}]" if project_name else ""
-            commit_msg = f"Update {len(files)} files{name_part} — {timestamp}"
+            commit_msg = f"Update {len(rel_paths)} files{name_part} — {timestamp}"
             try:
                 commit = repo.index.commit(commit_msg)
                 commit_hash = commit.hexsha[:7]
@@ -170,9 +187,9 @@ class GitService:
 
         return {
             "changed": commit_hash is not None,
-            "files_changed": len(files) if commit_hash else 0,
+            "files_changed": len(rel_paths) if commit_hash else 0,
             "commit_hash": commit_hash,
-            "files_count": len(files),
+            "files_count": len(rel_paths),
             "message": "Push successful." if commit_hash else "Files already synced.",
         }
 

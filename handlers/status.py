@@ -177,26 +177,30 @@ async def do_push(update: Update, project: dict) -> None:
         duration = time.time() - start_time
 
         commit_str = result.get("commit_hash")
-        FileTracker.record_pushed(project_id, batch)
-        ProjectManager.record_push(project_id)
-        ProjectManager.log_sync(
-            project_id,
-            "success",
-            files_changed=result.get("files_changed", 0),
-            commit_hash=commit_str,
-            duration_ms=int(duration * 1000),
-        )
-
-        progress = FileTracker.get_progress(project_path, project_id)
-        commit_line = f"Commit: `{commit_str}`\n" if commit_str else ""
-        report = (
-            f"✅ Synced {len(batch)} files [{project_name}]\n"
-            f"{commit_line}"
-            f"Duration: {duration:.1f}s\n"
-            f"Progress: {progress['pushed']}/{progress['total']} files ({progress['percent']:.0f}%)"
-        )
-        if progress["remaining"] > 0:
-            report += f"\nRemaining: ~{progress['remaining']} files"
+        if commit_str:
+            FileTracker.record_pushed(project_id, batch)
+            ProjectManager.record_push(project_id)
+            ProjectManager.log_sync(
+                project_id, "success",
+                files_changed=result.get("files_changed", 0),
+                commit_hash=commit_str,
+                duration_ms=int(duration * 1000),
+            )
+            progress = FileTracker.get_progress(project_path, project_id)
+            report = (
+                f"✅ Synced {len(batch)} files [{project_name}]\n"
+                f"Commit: `{commit_str}`\n"
+                f"Duration: {duration:.1f}s\n"
+                f"Progress: {progress['pushed']}/{progress['total']} files ({progress['percent']:.0f}%)"
+            )
+            if progress["remaining"] > 0:
+                report += f"\nRemaining: ~{progress['remaining']} files"
+        else:
+            ProjectManager.log_sync(
+                project_id, "no_changes",
+                duration_ms=int(duration * 1000),
+            )
+            report = f"ℹ️ No changes to push for {project_name}."
 
         await msg.edit_text(report)
 
