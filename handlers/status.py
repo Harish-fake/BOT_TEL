@@ -1,11 +1,12 @@
 import time
 import logging
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler
 
 from database import db
 from project_manager import ProjectManager
-from scheduler import scheduler_manager
+from scheduler import scheduler_manager, now_ist, format_ist
 from services.git_service import GitService, GitServiceError
 from services.encryption_service import EncryptionService
 from services.report_service import ReportService
@@ -54,8 +55,13 @@ async def show_project_status(update: Update, project: dict) -> None:
     next_push = None if paused else scheduler_manager.get_next_run_time(project["id"])
 
     last_push = project.get("last_push")
-    if last_push and "T" in last_push:
-        last_push = last_push.replace("T", " ")[:19]
+    if last_push:
+        try:
+            dt = datetime.fromisoformat(last_push.replace("Z", "+00:00"))
+            last_push = format_ist(dt)
+        except Exception:
+            if "T" in last_push:
+                last_push = last_push.replace("T", " ")[:19]
 
     progress = FileTracker.get_progress(project["project_path"], project["id"])
     batch_size = db.get_batch_size(project["id"])
@@ -71,6 +77,7 @@ async def show_project_status(update: Update, project: dict) -> None:
         next_push=next_push,
         schedule=schedule_desc,
     )
+    report = f"🕐 *Current Time:* {now_ist()}\n" + report
     if paused:
         report += "\n⏸ *Sync Paused*"
     report += f"\n\n📊 *Progress:*\n{progress_line}"
@@ -80,9 +87,14 @@ async def show_project_status(update: Update, project: dict) -> None:
         report += "\n\n*Recent Syncs:*"
         for log in logs:
             status_icon = "✅" if log["status"] == "success" else "❌"
-            ts = log["created_at"]
-            if ts and "T" in str(ts):
-                ts = str(ts).replace("T", " ")[:19]
+            ts_raw = log["created_at"]
+            ts = str(ts_raw)
+            try:
+                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                ts = format_ist(dt)
+            except Exception:
+                if "T" in ts:
+                    ts = ts.replace("T", " ")[:19]
             report += f"\n{status_icon} {ts} — {log.get('files_changed', 0)} files, {log.get('commit_hash', 'N/A') or 'N/A'}"
 
     controls = []

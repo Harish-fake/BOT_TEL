@@ -286,7 +286,14 @@ async def handle_callback_routing(update: Update, context: ContextTypes.DEFAULT_
                 text = f"📋 *Sync History — {project['project_name']}*\n\n"
                 for log in logs:
                     icon = "✅" if log["status"] == "success" else "❌"
-                    ts = str(log["created_at"]).replace("T", " ")[:19] if log.get("created_at") else "?"
+                    ts_raw = log.get("created_at", "")
+                    ts = "?"
+                    try:
+                        dt = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
+                        from scheduler import format_ist as fi
+                        ts = fi(dt)
+                    except Exception:
+                        ts = str(ts_raw).replace("T", " ")[:19] if ts_raw else "?"
                     files = log.get("files_changed", 0)
                     commit = log.get("commit_hash", "N/A") or "N/A"
                     text += f"{icon} {ts} — {files} files (`{commit}`)\n"

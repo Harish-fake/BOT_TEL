@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Callable
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -7,6 +7,17 @@ from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from database import db
 from config import config
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def format_ist(dt: datetime) -> str:
+    """Format a datetime as a human-friendly IST time string."""
+    t = dt.astimezone(IST)
+    return t.strftime("%I:%M %p IST").lstrip("0").replace("  ", " ")
+
+def now_ist() -> str:
+    """Return the current IST time as a human-friendly string."""
+    return format_ist(datetime.now(IST))
 
 logger = logging.getLogger(__name__)
 
@@ -94,9 +105,7 @@ class SchedulerManager:
         try:
             job = self.scheduler.get_job(job_id)
             if job and job.next_run_time:
-                t = job.next_run_time
-                ampm = t.strftime("%I:%M %p").lstrip("0")
-                return f"{ampm} IST"
+                return format_ist(job.next_run_time)
         except Exception:
             pass
         return None
