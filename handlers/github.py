@@ -139,44 +139,34 @@ async def receive_repo_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
         ProjectManager.link_github(project_id, account_id, url)
 
-        # Push ALL pending files in chunks of 50
+        # Push ONE batch of 4 files initially, rest will be pushed on schedule
         project_path = project["project_path"]
-        all_pending = FileTracker.get_pending_files(project_path, project_id)
         github_username = account.get("github_username", "")
-        total_files = len(all_pending)
+        batch_size = db.get_batch_size(project_id)
+        first_batch = FileTracker.get_next_batch(project_path, project_id, batch_size=batch_size)
         pushed_so_far = 0
         final_commit_hash = None
 
-        if all_pending:
-            CHUNK_SIZE = 4
-            for i in range(0, total_files, CHUNK_SIZE):
-                chunk = all_pending[i:i + CHUNK_SIZE]
-                await status_msg.edit_text(
-                    f"📤 Pushing files to GitHub...\n"
-                    f"Batch {i // CHUNK_SIZE + 1}/{(total_files + CHUNK_SIZE - 1) // CHUNK_SIZE}\n"
-                    f"Progress: {i}/{total_files} files"
-                )
-                chunk_result = GitService.batch_commit_and_push(
-                    project_path,
-                    token,
-                    url,
-                    chunk,
-                    project_name=project["project_name"],
-                    github_username=github_username,
-                )
-                if chunk_result.get("commit_hash"):
-                    FileTracker.record_pushed(project_id, chunk)
-                    pushed_so_far += len(chunk)
-                    final_commit_hash = chunk_result["commit_hash"]
-                else:
-                    logger.warning(f"Chunk {i // CHUNK_SIZE + 1} returned no commit hash for {project_id}")
-
-            ProjectManager.record_push(project_id)
-            ProjectManager.log_sync(
-                project_id, "success",
-                files_changed=pushed_so_far,
-                commit_hash=final_commit_hash or "",
+        if first_batch:
+            await status_msg.edit_text("📤 Pushing first batch of 4 files to GitHub...")
+            result = GitService.batch_commit_and_push(
+                project_path,
+                token,
+                url,
+                first_batch,
+                project_name=project["project_name"],
+                github_username=github_username,
             )
+            if result.get("commit_hash"):
+                FileTracker.record_pushed(project_id, first_batch)
+                pushed_so_far = len(first_batch)
+                final_commit_hash = result["commit_hash"]
+                ProjectManager.record_push(project_id)
+                ProjectManager.log_sync(
+                    project_id, "success",
+                    files_changed=len(first_batch),
+                    commit_hash=final_commit_hash,
+                )
 
         # Keep existing schedule if user set one, otherwise default to interval:4
         existing = db.get_schedule_by_project(project_id)
@@ -199,22 +189,18 @@ async def receive_repo_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             f"",
         ]
         if pushed_so_far > 0:
-            lines.append(f"📤 Pushed {pushed_so_far}/{total_files} files to GitHub.")
+            lines.append(f"📤 Pushed {pushed_so_far} files as first batch.")
             if final_commit_hash:
-                lines.append(f"Latest commit: `{final_commit_hash}`")
-            lines.append(f"✓ Pushed via `{github_username}`")
+                lines.append(f"Commit: `{final_commit_hash}` — via `{github_username}`")
         lines.append(f"")
         lines.append(f"📊 *Progress:* {pushed_count}/{total} files ({progress['percent']:.0f}%)")
         if remaining > 0:
-            lines.append(f"Remaining: ~{remaining} files")
+            lines.append(f"Remaining: ~{remaining} files (pushed in batches of {batch_size})")
             lines.append(f"⏰ Next batch: {scheduler_manager.get_next_run_time(project_id)}")
         else:
             lines.append(f"✅ All files pushed to GitHub!")
         lines.append(f"")
-        lines.append(f"⏰ *Schedule:* {schedule_expr}")
-        lines.append(f"Next auto-sync: {scheduler_manager.get_next_run_time(project_id) or 'N/A'}")
-        lines.append(f"If you modify files via Browse, they'll be pushed on this schedule.")
-        lines.append(f"Use /status to track progress.")
+        lines.append(f"⏰ Auto-sync will push remaining files on schedule.")
 
         await status_msg.edit_text("\n".join(lines), parse_mode="Markdown")
 
