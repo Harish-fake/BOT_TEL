@@ -270,7 +270,7 @@ class Database:
     # ── Schedules ──────────────────────────────────────────
 
     def add_schedule(
-        self, project_id: int, cron_expression: str, timezone: str = "UTC"
+        self, project_id: int, cron_expression: str, timezone: str = "Asia/Kolkata"
     ) -> int:
         cur = self.conn.execute(
             """INSERT INTO schedules (project_id, cron_expression, timezone)

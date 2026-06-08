@@ -4,13 +4,14 @@ from typing import Optional
 
 CRON_PATTERNS: dict[str, str] = {
     "daily_midnight": "0 0 * * *",
-    "daily_6am": "0 6 * * *",
-    "daily_9am": "0 9 * * *",
-    "daily_6pm": "0 18 * * *",
-    "daily_9pm": "0 21 * * *",
-    "weekly_monday": "0 9 * * 1",
-    "weekly_wednesday": "0 9 * * 3",
-    "weekly_friday": "0 9 * * 5",
+    "daily_630am": "30 6 * * *",
+    "daily_930am": "30 9 * * *",
+    "daily_12pm": "0 12 * * *",
+    "daily_630pm": "30 18 * * *",
+    "daily_930pm": "30 21 * * *",
+    "weekly_monday": "30 9 * * 1",
+    "weekly_wednesday": "30 9 * * 3",
+    "weekly_friday": "30 9 * * 5",
     "hourly": "0 * * * *",
 }
 
@@ -69,17 +70,18 @@ class ScheduleService:
     @staticmethod
     def describe_cron(cron_expr: str) -> str:
         descriptions: dict[str, str] = {
-            "0 */4 * * *": "Every 4 hours",
-            "0 */6 * * *": "Every 6 hours",
-            "0 */12 * * *": "Every 12 hours",
-            "0 0 * * *": "Daily at midnight",
-            "0 6 * * *": "Daily at 6:00 AM",
-            "0 9 * * *": "Daily at 9:00 AM",
-            "0 18 * * *": "Daily at 6:00 PM",
-            "0 21 * * *": "Daily at 9:00 PM",
-            "0 9 * * 1": "Every Monday at 9:00 AM",
-            "0 9 * * 3": "Every Wednesday at 9:00 AM",
-            "0 9 * * 5": "Every Friday at 9:00 AM",
-            "0 * * * *": "Every hour",
+            "0 */4 * * *": "Every 4 hours (IST)",
+            "0 */6 * * *": "Every 6 hours (IST)",
+            "0 */12 * * *": "Every 12 hours (IST)",
+            "0 0 * * *": "Daily at midnight (IST)",
+            "30 6 * * *": "Daily at 6:30 AM IST",
+            "30 9 * * *": "Daily at 9:30 AM IST",
+            "0 12 * * *": "Daily at 12:00 PM IST",
+            "30 18 * * *": "Daily at 6:30 PM IST",
+            "30 21 * * *": "Daily at 9:30 PM IST",
+            "30 9 * * 1": "Every Monday at 9:30 AM IST",
+            "30 9 * * 3": "Every Wednesday at 9:30 AM IST",
+            "30 9 * * 5": "Every Friday at 9:30 AM IST",
+            "0 * * * *": "Every hour (IST)",
         }
-        return descriptions.get(cron_expr, f"Cron: `{cron_expr}`")
+        return descriptions.get(cron_expr, f"Cron: `{cron_expr}` (IST)")

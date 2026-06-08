@@ -149,7 +149,7 @@ async def receive_repo_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             f"Branch: `{result['branch']}`\n"
             f"Total files to upload: {progress['total']}\n\n"
             f"⏰ *Auto-sync started!*\n"
-            f"Pushing files in batches of 4 every 4 hours.\n"
+            f"Pushing files in batches of 4 every 4 hours (IST).\n"
             f"Progress: 0/{progress['total']} files\n\n"
             f"📬 You will receive an update after each batch.\n"
             f"Use /status to check progress anytime.\n"

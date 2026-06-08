@@ -44,7 +44,7 @@ class SchedulerManager:
         self._initialized = True
         self.scheduler: AsyncIOScheduler = AsyncIOScheduler(
             jobstores={"default": SQLAlchemyJobStore(url=JOB_STORE_URL)},
-            timezone="UTC",
+            timezone="Asia/Kolkata",
         )
 
     def set_sync_callback(self, callback: Callable) -> None:
@@ -87,7 +87,7 @@ class SchedulerManager:
         try:
             job = self.scheduler.get_job(job_id)
             if job and job.next_run_time:
-                return job.next_run_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+                return job.next_run_time.strftime("%Y-%m-%d %H:%M:%S IST")
         except Exception:
             pass
         return None
