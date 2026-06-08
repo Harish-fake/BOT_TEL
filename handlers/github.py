@@ -148,7 +148,7 @@ async def receive_repo_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         final_commit_hash = None
 
         if all_pending:
-            CHUNK_SIZE = 50
+            CHUNK_SIZE = 4
             for i in range(0, total_files, CHUNK_SIZE):
                 chunk = all_pending[i:i + CHUNK_SIZE]
                 await status_msg.edit_text(
