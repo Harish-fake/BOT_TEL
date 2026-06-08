@@ -82,6 +82,7 @@ def setup_logging() -> None:
 
 async def scheduled_sync(project_id: int) -> None:
     logger = logging.getLogger(__name__)
+    logger.info(f"Scheduled sync triggered for project {project_id}")
     project = db.get_project(project_id)
     if not project:
         logger.warning(f"Project {project_id} not found for scheduled sync.")
@@ -495,9 +496,11 @@ def main() -> None:
     application.add_handler(CommandHandler("pushnow", pushnow_command))
     application.add_handler(CommandHandler("projects", projects_command))
     from handlers.settings import pause_command, resume_command, batchsize_command
+    from handlers.status import pushall_command as pushall_cmd
     application.add_handler(CommandHandler("pause", pause_command))
     application.add_handler(CommandHandler("resume", resume_command))
     application.add_handler(CommandHandler("batchsize", batchsize_command))
+    application.add_handler(CommandHandler("pushall", pushall_cmd))
 
     # Browse
     browse_conv = get_browse_conversation_handler()

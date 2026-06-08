@@ -323,6 +323,34 @@ async def do_push_all(update: Update, project: dict) -> None:
         await msg.edit_text(f"❌ Unexpected error: {e}")
 
 
+async def pushall_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    if not user:
+        return
+    user_db = db.get_user_by_telegram_id(user.id)
+    if not user_db:
+        await update.message.reply_text("Please use /start first.")
+        return
+    projects = db.get_user_projects(user_db["id"])
+    projects_with_github = [p for p in projects if p.get("github_repo") and p.get("github_account_id")]
+    if not projects_with_github:
+        await update.message.reply_text("No projects linked to GitHub. Use /github to link one.")
+        return
+    if context.args:
+        try:
+            project_id = int(context.args[0])
+            project = db.get_project(project_id)
+            if not project or project["user_id"] != user_db["id"] or not project.get("github_repo"):
+                await update.message.reply_text("Project not found or not linked.")
+                return
+            await do_push_all(update, project)
+        except ValueError:
+            await update.message.reply_text("Usage: /pushall <project_id>")
+    else:
+        for p in projects_with_github:
+            await do_push_all(update, p)
+
+
 async def projects_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if not user:
