@@ -65,10 +65,12 @@ async def show_project_status(update: Update, project: dict) -> None:
 
     progress = FileTracker.get_progress(project["project_path"], project["id"])
     batch_size = db.get_batch_size(project["id"])
+    bar = _progress_bar(progress['pushed'], progress['total'])
     progress_line = f"Uploaded: {progress['pushed']}/{progress['total']} files ({progress['percent']:.0f}%)"
+    progress_line += f"\n{bar}"
     if progress["remaining"] > 0:
-        progress_line += f"\nRemaining: ~{progress['remaining']} files (pushed in batches of {batch_size})"
-        progress_line += f"\nBatch size: {batch_size} files | /batchsize to change"
+        progress_line += f"\nRemaining: ~{progress['remaining']} files | Batch: {batch_size} files"
+        progress_line += f"\n/batchsize to change batch size"
 
     report = ReportService.status_report(
         project_name=project["project_name"],
@@ -104,7 +106,8 @@ async def show_project_status(update: Update, project: dict) -> None:
         else:
             controls.append(InlineKeyboardButton("⏸ Pause", callback_data=f"pause:{project['id']}"))
     keyboard = [
-        [InlineKeyboardButton("🚀 Push Now", callback_data=f"pushnow:{project['id']}")] + controls,
+        [InlineKeyboardButton("🚀 Push Next Batch", callback_data=f"pushnow:{project['id']}")] + controls,
+        [InlineKeyboardButton("📤 Push All Remaining", callback_data=f"pushall:{project['id']}")],
         [InlineKeyboardButton("📁 Browse", callback_data=f"browse_dir:{project['project_path']}")],
         [InlineKeyboardButton("📊 Sync History", callback_data=f"synclogs:{project['id']}")],
     ]
@@ -165,6 +168,7 @@ async def do_push(update: Update, project: dict) -> None:
     project_path = project["project_path"]
     project_name = project["project_name"]
     project_id = project["id"]
+    github_username = account.get("github_username", "")
 
     batch_size = db.get_batch_size(project_id)
     batch = FileTracker.get_next_batch(project_path, project_id, batch_size=batch_size)
@@ -184,6 +188,7 @@ async def do_push(update: Update, project: dict) -> None:
             project["github_repo"],
             batch,
             project_name=project_name,
+            github_username=github_username,
         )
 
         duration = time.time() - start_time
@@ -238,6 +243,86 @@ async def do_push(update: Update, project: dict) -> None:
         await msg.edit_text(f"❌ Unexpected error: {e}")
 
 
+def _progress_bar(pushed: int, total: int, width: int = 10) -> str:
+    if total <= 0:
+        return "⬜" * width
+    filled = int((pushed / total) * width)
+    return "🟩" * filled + "⬜" * (width - filled)
+
+
+async def do_push_all(update: Update, project: dict) -> None:
+    query = update.callback_query
+    await query.answer()
+    msg = await query.edit_message_text(f"📤 Pushing ALL remaining files for {project['project_name']}...")
+
+    account = db.get_github_account(project["github_account_id"])
+    if not account:
+        await msg.edit_text(f"❌ GitHub account not found.")
+        return
+
+    try:
+        token = EncryptionService.decrypt(account["token_encrypted"])
+    except Exception:
+        await msg.edit_text("❌ Failed to decrypt token.")
+        return
+
+    project_path = project["project_path"]
+    project_id = project["id"]
+    github_username = account.get("github_username", "")
+
+    all_pending = FileTracker.get_pending_files(project_path, project_id)
+    if not all_pending:
+        await msg.edit_text("✅ All files already synced. Nothing to push.")
+        return
+
+    start_time = time.time()
+    try:
+        result = GitService.batch_commit_and_push(
+            project_path,
+            token,
+            project["github_repo"],
+            all_pending,
+            project_name=project["project_name"],
+            github_username=github_username,
+        )
+        duration = time.time() - start_time
+
+        commit_str = result.get("commit_hash")
+        if commit_str:
+            FileTracker.record_pushed(project_id, all_pending)
+            ProjectManager.record_push(project_id)
+            ProjectManager.log_sync(
+                project_id, "success",
+                files_changed=result.get("files_changed", 0),
+                commit_hash=commit_str,
+                duration_ms=int(duration * 1000),
+            )
+            progress = FileTracker.get_progress(project_path, project_id)
+            report = (
+                f"✅ *Bulk Push Complete!*\n\n"
+                f"📤 Pushed {len(all_pending)} files in one batch.\n"
+                f"Commit: `{commit_str}`\n"
+                f"Duration: {duration:.1f}s\n"
+                f"Progress: {progress['pushed']}/{progress['total']} files"
+            )
+        else:
+            report = f"ℹ️ No changes to push for {project['project_name']}."
+
+        await msg.edit_text(report, parse_mode="Markdown")
+
+    except GitServiceError as e:
+        duration = time.time() - start_time
+        ProjectManager.log_sync(
+            project["id"], "failure",
+            error_message=str(e),
+            duration_ms=int(duration * 1000),
+        )
+        await msg.edit_text(f"❌ Push failed: {e}")
+    except Exception as e:
+        logger.exception(f"Bulk push failed for {project['project_name']}")
+        await msg.edit_text(f"❌ Unexpected error: {e}")
+
+
 async def projects_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if not user:
@@ -255,13 +340,25 @@ async def projects_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     projects_data = []
     for p in projects:
+        prog = FileTracker.get_progress(p["project_path"], p["id"])
+        bar = _progress_bar(prog['pushed'], prog['total'])
+        status_icon = "🔗" if p.get("github_repo") else "📁"
         projects_data.append({
             "id": p["id"],
             "project_name": p["project_name"],
             "github_repo": p.get("github_repo"),
+            "progress": f"{bar} {prog['pushed']}/{prog['total']}",
+            "status_icon": status_icon,
         })
 
-    report = ReportService.projects_list(projects_data)
+    lines = ["*Your Projects*\n"]
+    for pd in projects_data:
+        lines.append(f"{pd['status_icon']} *{pd['project_name']}*")
+        lines.append(f"  {pd['progress']}")
+        if pd.get("github_repo"):
+            lines.append(f"  Repo: `{pd['github_repo']}`")
+        lines.append("")
+    report = "\n".join(lines)
 
     keyboard = []
     for p in projects:

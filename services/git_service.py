@@ -1,5 +1,7 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+IST = timezone(timedelta(hours=5, minutes=30))
 from typing import Optional
 from git import Repo, InvalidGitRepositoryError, GitCommandError
 from git.exc import NoSuchPathError
@@ -115,6 +117,7 @@ class GitService:
         repo_url: str,
         project_name: str = "",
         branch: str = "main",
+        github_username: str = "",
     ) -> dict:
         repo = GitService.init_repo(project_path, branch)
         GitService._ensure_remote(repo, repo_url, token, branch)
@@ -124,9 +127,9 @@ class GitService:
         if not repo.index.diff("HEAD"):
             return {"changed": False, "message": "No changes to commit."}
 
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        name_part = f" [{project_name}]" if project_name else ""
-        commit_msg = f"Update files{name_part} — {timestamp}"
+        timestamp = datetime.now(IST).strftime("%Y-%m-%d %I:%M %p IST")
+        author = github_username or project_name or "GitSync Bot"
+        commit_msg = f"Uploaded via {author} — {timestamp}"
         commit = repo.index.commit(commit_msg)
 
         GitService._do_push(repo, repo_url, token, branch)
@@ -152,6 +155,7 @@ class GitService:
         files: list[dict],
         project_name: str = "",
         branch: str = "main",
+        github_username: str = "",
     ) -> dict:
         if not files:
             return {"changed": False, "message": "No files to push.", "files_count": 0}
@@ -173,9 +177,9 @@ class GitService:
                 has_diff = bool(repo.index.diff("HEAD"))
 
         if has_diff:
-            timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-            name_part = f" [{project_name}]" if project_name else ""
-            commit_msg = f"Update {len(rel_paths)} files{name_part} — {timestamp}"
+            timestamp = datetime.now(IST).strftime("%Y-%m-%d %I:%M %p IST")
+            author = github_username or project_name or "GitSync Bot"
+            commit_msg = f"Uploaded via {author} — {timestamp}"
             try:
                 commit = repo.index.commit(commit_msg)
                 commit_hash = commit.hexsha[:7]

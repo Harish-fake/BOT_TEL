@@ -105,6 +105,8 @@ async def scheduled_sync(project_id: int) -> None:
     project_path = project["project_path"]
     project_name = project["project_name"]
 
+    github_username = account.get("github_username", "")
+
     batch_size = db.get_batch_size(project_id)
     batch = FileTracker.get_next_batch(project_path, project_id, batch_size=batch_size)
     if not batch:
@@ -135,6 +137,7 @@ async def scheduled_sync(project_id: int) -> None:
             project["github_repo"],
             batch,
             project_name=project_name,
+            github_username=github_username,
         )
         duration = time.time() - start
 
@@ -306,6 +309,14 @@ async def handle_callback_routing(update: Update, context: ContextTypes.DEFAULT_
         if project:
             from handlers.status import do_push
             await do_push(update, project)
+    elif data.startswith("pushall:"):
+        query = update.callback_query
+        await query.answer()
+        project_id = int(data.split(":")[1])
+        project = db.get_project(project_id)
+        if project:
+            from handlers.status import do_push_all
+            await do_push_all(update, project)
     elif data.startswith("pause:"):
         query = update.callback_query
         await query.answer()

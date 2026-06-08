@@ -142,6 +142,7 @@ async def receive_repo_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         # Push ALL pending files immediately (initial sync)
         project_path = project["project_path"]
         all_pending = FileTracker.get_pending_files(project_path, project_id)
+        github_username = account.get("github_username", "")
 
         push_result = None
         if all_pending:
@@ -152,6 +153,7 @@ async def receive_repo_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 url,
                 all_pending,
                 project_name=project["project_name"],
+                github_username=github_username,
             )
             if push_result.get("commit_hash"):
                 FileTracker.record_pushed(project_id, all_pending)
