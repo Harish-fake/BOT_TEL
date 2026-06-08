@@ -69,6 +69,9 @@ class ScheduleService:
 
     @staticmethod
     def describe_cron(expr: str) -> str:
+        if expr.startswith("interval_minutes:"):
+            minutes = expr.split(":")[1]
+            return f"Every {minutes} minute{'s' if int(minutes) > 1 else ''} (from connection time)"
         if expr.startswith("interval:"):
             hours = expr.split(":")[1]
             return f"Every {hours} hours (from connection time)"

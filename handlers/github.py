@@ -164,12 +164,12 @@ async def receive_repo_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     commit_hash=push_result["commit_hash"],
                 )
 
-        # Keep existing schedule if user set one, otherwise default to interval:1
+        # Keep existing schedule if user set one, otherwise default to interval:4
         existing = db.get_schedule_by_project(project_id)
         if existing and existing.get("cron_expression"):
             schedule_expr = existing["cron_expression"]
         else:
-            schedule_expr = "interval:1"
+            schedule_expr = "interval:4"
             ProjectManager.set_schedule(project_id, schedule_expr)
         scheduler_manager.add_job(project_id, schedule_expr)
 

@@ -75,7 +75,10 @@ class SchedulerManager:
     def add_job(self, project_id: int, expression: str) -> str:
         job_id = f"sync_project_{project_id}"
 
-        if expression.startswith("interval:"):
+        if expression.startswith("interval_minutes:"):
+            minutes = int(expression.split(":")[1])
+            trigger = IntervalTrigger(minutes=minutes)
+        elif expression.startswith("interval:"):
             hours = int(expression.split(":")[1])
             trigger = IntervalTrigger(hours=hours)
         else:

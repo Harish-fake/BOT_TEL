@@ -16,6 +16,7 @@ SELECTING_CUSTOM_CRON = 3
 
 
 SCHEDULE_OPTIONS: list[tuple[str, str, str]] = [
+    ("⚡ Every 1 Minute (from now)", "interval_minutes:1", "every_1min"),
     ("⏰ Every 4 Hours (from now)", "interval:4", "every_4h"),
     ("⚡ Every Hour (from now)", "interval:1", "hourly"),
     ("🕐 Every 6 Hours (from now)", "interval:6", "every_6h"),

@@ -19,7 +19,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "2️⃣ */upload* — Send your project ZIP\n"
         "3️⃣ */github* — Link to a GitHub repo\n"
         "4️⃣ ✅ *Auto-sync begins!*\n\n"
-        "⏰ *Sync Schedule:* Every 1 hour by default (change anytime)\n"
+        "⏰ *Sync Schedule:* Every 4 hours by default (change anytime)\n"
         "📤 *Batch Size:* 4 files per push (change via /batchsize)\n\n"
         "📊 /status — Track sync progress\n"
         "⏸ /pause · /resume — Pause or resume syncing\n"
