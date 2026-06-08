@@ -29,7 +29,6 @@ from scheduler import scheduler_manager
 from handlers.start import start, help_command, about
 from handlers.upload import upload_start, receive_zip, cancel, WAITING_FOR_ZIP
 from handlers.browse import (
-    browse_callback,
     select_project_callback as browse_select_project,
     get_browse_conversation_handler,
 )
@@ -53,7 +52,7 @@ from services.report_service import ReportService
 from services.file_service import FileService
 from services.file_tracker import FileTracker
 import time
-import asyncio
+from datetime import datetime
 
 
 def setup_logging() -> None:
@@ -370,11 +369,6 @@ async def handle_callback_routing(update: Update, context: ContextTypes.DEFAULT_
             await query.edit_message_text(f"🗑 Deleted *{project['project_name']}*.", parse_mode="Markdown")
     elif data.startswith("select_project:"):
         await browse_select_project(update, context)
-    elif data.startswith("browse_") or data.startswith("view_file") or data.startswith("delete_path") or data.startswith("confirm_delete") or data.startswith("rename_start") or data.startswith("create_file") or data.startswith("create_folder") or data == "list_projects":
-        from handlers.browse import browse_callback as browse_fn
-        state = await browse_fn(update, context)
-        if state:
-            context.user_data["browse_state"] = state
 
 
 application: Application = None
@@ -434,8 +428,6 @@ def main() -> None:
         logger.critical("BOT_TOKEN not set! Create a .env file with BOT_TOKEN=<your_token>")
         sys.exit(1)
 
-    db_conn = db.conn
-
     scheduler_manager.set_sync_callback(scheduled_sync)
 
     async def post_init(app: Application) -> None:
@@ -448,7 +440,7 @@ def main() -> None:
         .token(config.BOT_TOKEN)
         .connect_timeout(config.CONNECT_TIMEOUT)
         .read_timeout(config.READ_TIMEOUT)
-        .write_timeout(config.READ_TIMEOUT)
+        .write_timeout(config.WRITE_TIMEOUT)
         .pool_timeout(config.CONNECT_TIMEOUT)
         .post_init(post_init)
         .build()

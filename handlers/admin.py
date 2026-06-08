@@ -1,6 +1,6 @@
 import os
 import logging
-from telegram import Update
+from telegram import Update, InputFile
 from telegram.ext import ContextTypes, CommandHandler, filters
 
 from database import db
@@ -104,11 +104,11 @@ async def admin_logs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     try:
         with open(log_path, "rb") as f:
-            await update.message.reply_document(
-                document=f,
-                filename="bot.log",
-                caption="📋 Bot Log File",
-            )
+            data = f.read()
+        await update.message.reply_document(
+            document=InputFile(data, filename="bot.log"),
+            caption="📋 Bot Log File",
+        )
     except Exception as e:
         await update.message.reply_text(f"Error sending log: {e}")
 

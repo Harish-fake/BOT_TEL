@@ -21,7 +21,7 @@ def now_ist() -> str:
 
 logger = logging.getLogger(__name__)
 
-JOB_STORE_URL = f"sqlite:///{config.DATABASE_PATH}"
+JOB_STORE_URL = f"sqlite:///database/apscheduler.db"
 
 # Module-level callback registry so APScheduler doesn't try to pickle a
 # scheduler instance when serializing job references.

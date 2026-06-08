@@ -15,7 +15,7 @@ class Config:
             int(x.strip())
             for x in os.getenv("ADMIN_IDS", "").split(",")
             if x.strip()
-        ]
+        ] if os.getenv("ADMIN_IDS") else []
     )
     DATABASE_PATH: str = os.getenv("DATABASE_PATH", "database/bot.db")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
@@ -23,6 +23,7 @@ class Config:
     MAX_ZIP_ENTRIES: int = int(os.getenv("MAX_ZIP_ENTRIES", "10000"))
     CONNECT_TIMEOUT: float = float(os.getenv("CONNECT_TIMEOUT", "60.0"))
     READ_TIMEOUT: float = float(os.getenv("READ_TIMEOUT", "60.0"))
+    WRITE_TIMEOUT: float = float(os.getenv("WRITE_TIMEOUT", "60.0"))
 
 
 config = Config()

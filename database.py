@@ -247,7 +247,10 @@ class Database:
             "SELECT batch_size FROM projects WHERE id = ?", (project_id,)
         )
         row = cur.fetchone()
-        return row["batch_size"] if row and row["batch_size"] else 4
+        if row is None:
+            return 4
+        val = row["batch_size"]
+        return val if val is not None else 4
 
     def set_batch_size(self, project_id: int, batch_size: int) -> None:
         self.conn.execute(

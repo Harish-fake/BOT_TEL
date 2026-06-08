@@ -8,8 +8,6 @@ services:
     envVars:
       - key: BOT_TOKEN
         sync: false
-      - key: GITHUB_TOKEN
-        sync: false
       - key: ADMIN_IDS
         value: ""
       - key: DATABASE_PATH

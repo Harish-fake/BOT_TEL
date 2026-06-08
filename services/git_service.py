@@ -183,7 +183,11 @@ class GitService:
                 pass
 
         # Check for unpushed commits (new commit or leftover from a prior failed push)
-        unpushed = list(repo.iter_commits(f"origin/{branch}..{branch}"))
+        unpushed = []
+        try:
+            unpushed = list(repo.iter_commits(f"origin/{branch}..{branch}"))
+        except Exception:
+            pass
         if commit_hash or unpushed:
             try:
                 GitService._do_push(repo, repo_url, token, branch)

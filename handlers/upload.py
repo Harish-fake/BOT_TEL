@@ -95,9 +95,8 @@ async def receive_zip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         ZipService.cleanup(extract_path)
         return ConversationHandler.END
 
-    db.add_project(user_db["id"], project_name, extract_path)
-    project = db.get_user_projects(user_db["id"])[0]
-    context.user_data["current_project_id"] = project["id"]
+    project_id = db.add_project(user_db["id"], project_name, extract_path)
+    context.user_data["current_project_id"] = project_id
 
     report = ReportService.analysis_report(
         project_name,

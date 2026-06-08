@@ -21,7 +21,25 @@ def get_project_path(project_id: int) -> str:
     project = db.get_project(project_id)
     if not project:
         raise FileServiceError("Project not found.")
-    return project["project_path"]
+    return os.path.abspath(project["project_path"])
+
+
+def _resolve_project_path(user_db: dict, path: str) -> str:
+    """Resolve a user-supplied path and verify it belongs to one of their projects.
+    Returns the resolved absolute path. Raises FileServiceError on invalid/unauthorized paths."""
+    projects = db.get_user_projects(user_db["id"])
+    allowed_roots = [os.path.abspath(p["project_path"]) for p in projects]
+    abs_path = os.path.abspath(path)
+    for root in allowed_roots:
+        if os.path.commonpath([abs_path, root]) == root:
+            return abs_path
+    raise FileServiceError("Access denied: path is outside your project directories.")
+
+
+def _assert_project_owner(user_db: dict, project_id: int) -> None:
+    project = db.get_project(project_id)
+    if not project or project["user_id"] != user_db["id"]:
+        raise FileServiceError("Project not found or access denied.")
 
 
 async def browse_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -29,54 +47,70 @@ async def browse_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
 
     data = query.data
-    if data == "browse_root":
-        project_id = context.user_data.get("current_project_id")
-        if not project_id:
-            await query.edit_message_text("No project selected. Use /upload first.")
-            return
-        try:
+    user = query.from_user
+    user_db = db.get_user_by_telegram_id(user.id) if user else None
+    if not user_db:
+        await query.edit_message_text("Please use /start first.")
+        return ConversationHandler.END
+
+    try:
+        if data == "browse_root":
+            project_id = context.user_data.get("current_project_id")
+            if not project_id:
+                await query.edit_message_text("No project selected. Use /upload first.")
+                return ConversationHandler.END
+            _assert_project_owner(user_db, project_id)
             project_path = get_project_path(project_id)
             await show_directory(query, context, project_path)
-        except FileServiceError as e:
-            await query.edit_message_text(str(e))
-    elif data.startswith("browse_dir:"):
-        path = data[len("browse_dir:"):]
-        await show_directory(query, context, path)
-    elif data.startswith("view_file:"):
-        path = data[len("view_file:"):]
-        await show_file(query, context, path)
-    elif data.startswith("delete_path:"):
-        path = data[len("delete_path:"):]
-        await confirm_delete(query, context, path)
-    elif data.startswith("confirm_delete:"):
-        path = data[len("confirm_delete:"):]
-        await perform_delete(query, context, path)
-    elif data.startswith("rename_start:"):
-        path = data[len("rename_start:"):]
-        context.user_data["rename_path"] = path
-        await query.edit_message_text(
-            f"✏️ Enter new name for:\n`{os.path.basename(path)}`\n\n"
-            "Send /cancel to abort.",
-            parse_mode="Markdown",
-        )
-        return WAITING_RENAME
-    elif data.startswith("create_file:"):
-        path = data[len("create_file:"):]
-        context.user_data["create_dir"] = path
-        await query.edit_message_text(
-            "📄 Enter the file name (e.g., `newfile.py`):",
-            parse_mode="Markdown",
-        )
-        return WAITING_CREATE_FILE
-    elif data.startswith("create_folder:"):
-        path = data[len("create_folder:"):]
-        context.user_data["create_dir"] = path
-        await query.edit_message_text(
-            "📁 Enter the folder name:",
-        )
-        return WAITING_CREATE_FOLDER
-    elif data == "list_projects":
-        await list_projects(query, context)
+        elif data.startswith("browse_dir:"):
+            path = data[len("browse_dir:"):]
+            safe = _resolve_project_path(user_db, path)
+            await show_directory(query, context, safe)
+        elif data.startswith("view_file:"):
+            path = data[len("view_file:"):]
+            safe = _resolve_project_path(user_db, path)
+            await show_file(query, context, safe)
+        elif data.startswith("delete_path:"):
+            path = data[len("delete_path:"):]
+            safe = _resolve_project_path(user_db, path)
+            await confirm_delete(query, context, safe)
+        elif data.startswith("confirm_delete:"):
+            path = data[len("confirm_delete:"):]
+            safe = _resolve_project_path(user_db, path)
+            await perform_delete(query, context, safe)
+        elif data.startswith("rename_start:"):
+            path = data[len("rename_start:"):]
+            safe = _resolve_project_path(user_db, path)
+            context.user_data["rename_path"] = safe
+            await query.edit_message_text(
+                f"✏️ Enter new name for:\n`{os.path.basename(safe)}`\n\n"
+                "Send /cancel to abort.",
+                parse_mode="Markdown",
+            )
+            return WAITING_RENAME
+        elif data.startswith("create_file:"):
+            path = data[len("create_file:"):]
+            safe = _resolve_project_path(user_db, path)
+            context.user_data["create_dir"] = safe
+            await query.edit_message_text(
+                "📄 Enter the file name (e.g., `newfile.py`):",
+                parse_mode="Markdown",
+            )
+            return WAITING_CREATE_FILE
+        elif data.startswith("create_folder:"):
+            path = data[len("create_folder:"):]
+            safe = _resolve_project_path(user_db, path)
+            context.user_data["create_dir"] = safe
+            await query.edit_message_text(
+                "📁 Enter the folder name:",
+            )
+            return WAITING_CREATE_FOLDER
+        elif data == "list_projects":
+            await list_projects(query, context)
+        else:
+            return ConversationHandler.END
+    except FileServiceError as e:
+        await query.edit_message_text(str(e))
 
     return ConversationHandler.END
 
