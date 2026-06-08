@@ -182,8 +182,17 @@ class GitService:
             except GitCommandError:
                 pass
 
-        if commit_hash:
-            GitService._do_push(repo, repo_url, token, branch)
+        # Check for unpushed commits (new commit or leftover from a prior failed push)
+        unpushed = list(repo.iter_commits(f"origin/{branch}..{branch}"))
+        if commit_hash or unpushed:
+            try:
+                GitService._do_push(repo, repo_url, token, branch)
+                if not commit_hash and unpushed:
+                    commit_hash = unpushed[0].hexsha[:7]
+            except GitServiceError as e:
+                if not commit_hash:
+                    raise
+                # New commit was made but push failed — return hash so caller can retry later
 
         return {
             "changed": commit_hash is not None,
