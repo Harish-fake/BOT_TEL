@@ -395,14 +395,10 @@ def _start_health_server() -> None:
 
     class HealthHandler(http.server.BaseHTTPRequestHandler):
         def do_GET(self) -> None:
-            if self.path == "/health":
-                self.send_response(200)
-                self.send_header("Content-Type", "text/plain")
-                self.end_headers()
-                self.wfile.write(b"OK")
-            else:
-                self.send_response(404)
-                self.end_headers()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"OK")
 
         def log_message(self, fmt, *args) -> None:
             pass
