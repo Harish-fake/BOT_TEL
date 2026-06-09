@@ -139,7 +139,9 @@ class Database:
             );
         """
         if self._pg:
+            self.conn.autocommit = True
             self.conn.cursor().execute(schema)
+            self.conn.autocommit = False
         else:
             self.conn.executescript(schema)
         try:
