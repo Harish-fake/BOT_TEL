@@ -438,9 +438,28 @@ def main() -> None:
 
     scheduler_manager.set_sync_callback(scheduled_sync)
 
+    async def _keep_alive() -> None:
+        import asyncio
+        public_url = os.environ.get("RENDER_EXTERNAL_URL", os.environ.get("PUBLIC_URL", ""))
+        while True:
+            await asyncio.sleep(600)
+            try:
+                if public_url:
+                    import httpx
+                    async with httpx.AsyncClient(timeout=10) as c:
+                        await c.get(f"{public_url}/health")
+                else:
+                    port = int(os.environ.get("PORT", 8080))
+                    reader, writer = await asyncio.open_connection("localhost", port)
+                    writer.close()
+                    await writer.wait_closed()
+            except Exception:
+                pass
+
     async def post_init(app: Application) -> None:
         scheduler_manager.start()
         scheduler_manager.reschedule_all()
+        asyncio.ensure_future(_keep_alive())
         logger.info("Scheduler started and jobs rescheduled.")
 
     application = (

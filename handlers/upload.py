@@ -52,17 +52,15 @@ async def receive_zip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return WAITING_FOR_ZIP
 
     status_msg = await update.message.reply_text("⬇️ Downloading ZIP file...")
-    actual_mb = 0.0
 
     try:
         file = await document.get_file(read_timeout=300)
-        actual_mb = (file.file_size or 0) / (1024 * 1024)
+        size_mb = (file.file_size or 0) / (1024 * 1024)
 
         if file.file_size and file.file_size > 50 * 1024 * 1024:
             await status_msg.edit_text(
-                f"❌ File too large ({actual_mb:.1f} MB).\n"
-                "Telegram's bot API has a 50 MB download limit.\n\n"
-                "Please split your ZIP into smaller parts (under 50 MB each)."
+                f"❌ File too large ({size_mb:.1f} MB). Telegram's limit is 50 MB.\n"
+                "Please split your ZIP into smaller parts."
             )
             return ConversationHandler.END
 
@@ -70,18 +68,26 @@ async def receive_zip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         os.makedirs(temp_dir, exist_ok=True)
         zip_path = os.path.join(temp_dir, f"{uuid.uuid4().hex}_{document.file_name}")
 
-        await file.download_to_drive(
-            custom_path=zip_path,
-            read_timeout=600,
-            write_timeout=600,
-            connect_timeout=60,
-        )
+        bot_token = config.BOT_TOKEN
+        dl_url = f"https://api.telegram.org/file/bot{bot_token}/{file.file_path}"
+
+        import httpx
+        async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=60.0)) as client:
+            async with client.stream("GET", dl_url) as resp:
+                if resp.status_code in (413, 502):
+                    raise RuntimeError("413 File too large")
+                resp.raise_for_status()
+                content_len = resp.headers.get("content-length")
+                if content_len and int(content_len) > 50 * 1024 * 1024:
+                    raise RuntimeError(f"413 File too large ({int(content_len)/1024/1024:.0f} MB)")
+                with open(zip_path, "wb") as f:
+                    async for chunk in resp.aiter_bytes(chunk_size=65536):
+                        f.write(chunk)
     except Exception as e:
         err = str(e).lower()
         if "too big" in err or "413" in err:
             await status_msg.edit_text(
-                f"❌ Download failed: Telegram API says file is too large "
-                f"(limit is ~50 MB). Your file was {actual_mb:.1f} MB.\n"
+                "❌ File too large. Telegram's bot API has a 50 MB download limit.\n"
                 "Please split your ZIP into smaller parts."
             )
         else:
