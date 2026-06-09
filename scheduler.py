@@ -22,7 +22,7 @@ def now_ist() -> str:
 logger = logging.getLogger(__name__)
 
 import os
-JOB_STORE_URL = os.environ.get("DATABASE_URL", "sqlite:///database/apscheduler.db")
+JOB_STORE_URL = os.environ.get("DATABASE_URL") or "sqlite:///database/apscheduler.db"
 if JOB_STORE_URL.startswith("postgres://"):
     JOB_STORE_URL = "postgresql" + JOB_STORE_URL[len("postgres"):]
 

@@ -13,4 +13,4 @@ COPY . .
 
 RUN mkdir -p storage/projects storage/temp storage/logs database
 
-CMD ["python", "test_deploy.py"]
+CMD ["python", "bot.py"]
