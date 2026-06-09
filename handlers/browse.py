@@ -62,6 +62,13 @@ async def browse_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             _assert_project_owner(user_db, project_id)
             project_path = get_project_path(project_id)
             await show_directory(query, context, project_path)
+        elif data.startswith("browse_project:"):
+            project_id = int(data[len("browse_project:"):])
+            project = db.get_project(project_id)
+            if not project:
+                await query.answer("Project not found.")
+                return
+            path = project["project_path"]
         elif data.startswith("browse_dir:"):
             path = data[len("browse_dir:"):]
             safe = _resolve_project_path(user_db, path)

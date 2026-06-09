@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from typing import Optional
 
 
 TECH_DETECTORS: dict[str, list[str]] = {
@@ -44,14 +43,12 @@ class ProjectAnalyzer:
         folders_count = 0
         loc = 0
         detected_techs: set[str] = set()
-        all_files: list[str] = []
 
         for root, dirs, files in os.walk(project_path):
             folders_count += len(dirs)
             for file in files:
                 files_count += 1
                 fpath = os.path.join(root, file)
-                all_files.append(fpath)
 
                 ext = Path(file).suffix.lower()
 

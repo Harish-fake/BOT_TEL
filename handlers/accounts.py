@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters, CallbackQueryHandler
+from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
 
 from database import db
 from services.report_service import ReportService

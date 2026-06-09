@@ -1,155 +1,131 @@
-# GitSync Telegram Bot
+# GitSync Bot
 
-A production-ready Telegram bot that manages software projects, connects them to GitHub repositories, monitors file changes, and automatically pushes updates on a scheduled basis.
+A Telegram bot that uploads your project files to GitHub in scheduled batches.
+
+Upload a ZIP → Bot extracts and analyzes it → Link a GitHub repo → Bot pushes 4 files per batch on your chosen schedule (every 1 min, 1 hour, 4 hours, daily, etc.).
 
 ## Features
 
-- **Project Upload** — Upload project ZIP files (up to 1GB) for analysis and management
-- **Project Analysis** — Automatically detects file count, folder count, lines of code, and technologies used
-- **File Management** — Browse, view, create, delete, and rename files directly via Telegram
-- **Multiple GitHub Accounts** — Link multiple GitHub accounts per user, assign per project
-- **Git Integration** — Initialize repos, create `.gitignore`, commit and push
-- **Auto-Sync** — Daily, weekly, or custom cron scheduling via APScheduler
-- **Manual Push** — Immediate commit and push with `/pushnow`
-- **Status Reports** — View sync history, changed files, and commit hashes
-- **Admin Panel** — View users, projects, stats, and logs
-- **Security** — Token encryption, ZIP validation, path traversal protection
-- **Persistent Logging** — Rotating log files
+- **📤 Upload & Analyze** — Send a ZIP file; the bot counts files, folders, LOC, and detects technologies (Python, Java, JS, React, etc.)
+- **🔗 GitHub Integration** — Link multiple GitHub accounts, assign per project
+- **⏰ Scheduled Sync** — Push files in batches of 4 on interval (1m/1h/4h/6h/12h) or daily/weekly cron
+- **📊 Progress Tracking** — `/status` shows progress bar, next push time, sync history
+- **📁 File Browser** — Browse, delete, rename, and create files directly in Telegram
+- **⏸ Pause/Resume** — Control sync per project
+- **🔒 Private & Secure** — Per-user data isolation, encrypted tokens, path traversal protection
+- **📱 Interactive UI** — Inline buttons throughout for a guided experience
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `/start` | Welcome message and command list |
-| `/help` | Detailed help |
-| `/about` | Bot information |
-| `/upload` | Upload a project ZIP file |
-| `/projects` | List your projects |
-| `/status` | View project status and sync info |
-| `/pushnow` | Immediately push changes to GitHub |
-| `/github` | Link a project to a GitHub repository |
-| `/schedule` | Set auto-sync schedule |
-| `/accounts` | List linked GitHub accounts |
-| `/addaccount` | Add a new GitHub account |
-| `/menu` | Show interactive menu |
-| `/users` | [Admin] List all users |
-| `/stats` | [Admin] Bot statistics |
-| `/logs` | [Admin] Download log file |
+| `/start` | Welcome & quick start |
+| `/upload` | Send a project ZIP file |
+| `/github` | Link a project to a GitHub repo |
+| `/projects` | List your projects with progress |
+| `/status` | Sync progress, next push, history |
+| `/pushnow` | Push next batch immediately |
+| `/pushall` | Push ALL remaining files at once |
+| `/schedule` | Set sync frequency |
+| `/pause` | Pause auto-sync |
+| `/resume` | Resume auto-sync |
+| `/batchsize` | Change files per batch (1–50) |
+| `/addaccount` | Add a GitHub account |
+| `/accounts` | List GitHub accounts |
+| `/menu` | Interactive menu |
+| `/help` | Full command guide |
 
-## Setup
-
-### Prerequisites
-
-- Python 3.12+
-- A Telegram Bot Token (from [@BotFather](https://t.me/BotFather))
-- A GitHub Personal Access Token
-
-### Local Installation
+## Quick Start
 
 ```bash
-# Clone the repository
 git clone <repo-url> gitsync-bot
 cd gitsync-bot
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-
-# Configure
 cp .env.example .env
-# Edit .env with your BOT_TOKEN and ADMIN_IDS
-
-# Run
+# Edit .env: set BOT_TOKEN, ADMIN_IDS
 python bot.py
 ```
 
-### Configuration
+Then in Telegram:
+1. `/start` → 4-step guide
+2. `/addaccount` → paste your GitHub PAT
+3. `/upload` → send your project ZIP
+4. `/github` → link to a repo → auto-sync begins
 
-Create a `.env` file:
+## Deployment
 
-```env
-BOT_TOKEN=your_telegram_bot_token
-GITHUB_TOKEN=your_github_token
-ADMIN_IDS=123456789,987654321
-DATABASE_PATH=database/bot.db
-LOG_LEVEL=INFO
-```
+### Render (free)
 
-### Docker Deployment
+1. Push this repo to GitHub
+2. [Create a free PostgreSQL database](https://dashboard.render.com/new/database) — gives you `DATABASE_URL`
+3. [Create a Worker service](https://dashboard.render.com/new/worker) → connect repo → set `BOT_TOKEN` and `ADMIN_IDS`
+4. The bot auto-configures via `render.yaml`
+
+### Docker
 
 ```bash
 docker compose up -d
 ```
 
-### Render Deployment
-
-1. Push this repo to GitHub
-2. Go to [Render Dashboard](https://dashboard.render.com)
-3. Click **New +** → **Worker**
-4. Connect your repository
-5. Render will auto-detect the `render.yaml`
-6. Set the `BOT_TOKEN` environment variable in Render dashboard
-7. Deploy
-
 ## Project Structure
 
 ```
 gitsync-bot/
-├── bot.py                  # Entry point
-├── config.py               # Configuration
-├── database.py             # SQLite schema & CRUD
-├── scheduler.py            # APScheduler wrapper
-├── github_manager.py       # GitHub operations
-├── project_manager.py      # Project CRUD
-├── analyzer.py             # Project analysis
+├── bot.py                  # Entry point, handler registration, scheduler
+├── config.py               # Environment configuration
+├── database.py             # SQLite/PostgreSQL schema & CRUD
+├── scheduler.py            # APScheduler with SQLAlchemyJobStore
+├── github_manager.py       # GitHub init & push operations
+├── project_manager.py      # Business logic layer
+├── analyzer.py             # Project analysis (file count, LOC, tech detection)
 ├── handlers/
 │   ├── start.py            # /start, /help, /about
-│   ├── upload.py           # /upload
-│   ├── browse.py           # File browsing
-│   ├── accounts.py         # /accounts, /addaccount
-│   ├── github.py           # /github
-│   ├── status.py           # /status, /pushnow, /projects
-│   ├── settings.py         # /schedule
-│   └── admin.py            # Admin commands
+│   ├── upload.py           # ZIP upload & extraction
+│   ├── browse.py           # File browser with path traversal protection
+│   ├── accounts.py         # GitHub account management
+│   ├── github.py           # GitHub linking flow
+│   ├── status.py           # Progress, push, projects list
+│   ├── settings.py         # Schedule & batch size config
+│   └── admin.py            # Admin commands (/users, /stats, /logs)
 ├── services/
+│   ├── git_service.py      # Git commit & push operations
+│   ├── file_service.py     # File system operations
+│   ├── file_tracker.py     # SHA-256 file tracking & batch selection
 │   ├── zip_service.py      # ZIP validation & extraction
-│   ├── file_service.py     # File operations
-│   ├── git_service.py      # Git operations
-│   ├── report_service.py   # Report formatting
-│   ├── schedule_service.py # Schedule utilities
-│   └── encryption_service.py # Token encryption
-├── storage/
-│   ├── projects/           # Extracted projects
-│   ├── temp/               # Temporary uploads
-│   └── logs/               # Rotating logs
-├── database/
-│   └── bot.db              # SQLite database
+│   ├── encryption_service.py # Fernet token encryption
+│   ├── report_service.py   # Formatted Telegram messages
+│   └── schedule_service.py # Cron expression parsing
+├── storage/                # Runtime data (ephemeral — use PostgreSQL on Render)
+├── database/               # SQLite fallback location
 ├── Dockerfile
 ├── docker-compose.yml
 ├── render.yaml
-├── requirements.txt
-└── .env.example
+└── requirements.txt
 ```
 
-## Database Schema
+## Architecture
 
-- **users** — Telegram user accounts
-- **github_accounts** — Linked GitHub accounts per user
-- **projects** — Uploaded projects with GitHub linkage
-- **schedules** — Sync schedules per project
-- **sync_logs** — Sync operation history
-- **settings** — Key-value settings
+- **python-telegram-bot v22** — async polling, ConversationHandler for multi-step flows
+- **APScheduler** — interval & cron triggers, SQLAlchemyJobStore for persistence
+- **SQLite** (local) / **PostgreSQL** (production) — auto-detected via `DATABASE_URL`
+- **GitPython** — `repo.index.add()`, `commit()`, `push()` with auth URL swapping
+- **cryptography (Fernet)** — token encryption key derived from `ENCRYPTION_KEY` or `BOT_TOKEN`
+- **httpx** — async streaming downloads for large ZIP files
+
+Each push commits 4 files (configurable) with message format:
+```
+Uploaded via <github_username> — 2026-06-09 04:20 PM IST
+```
 
 ## Security
 
-- GitHub tokens are encrypted with AES (Fernet) before storage
-- ZIP files are validated for size, entry count, and path traversal
-- Rate limiting on file operations
-- Admin-only commands require pre-configured user IDs
-- No tokens exposed in logs or responses
+- GitHub tokens encrypted with Fernet before storage
+- ZIP extraction guards against path traversal (`os.path.commonpath` check)
+- File operations validate project ownership before allowing browse/delete/rename
+- Admin commands restricted to `ADMIN_IDS`
+- No hardcoded secrets — all via environment variables
+- `.dockerignore` prevents secrets from entering images
 
 ## License
 

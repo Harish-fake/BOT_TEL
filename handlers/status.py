@@ -108,7 +108,7 @@ async def show_project_status(update: Update, project: dict) -> None:
     keyboard = [
         [InlineKeyboardButton("🚀 Push Next Batch", callback_data=f"pushnow:{project['id']}")] + controls,
         [InlineKeyboardButton("📤 Push All Remaining", callback_data=f"pushall:{project['id']}")],
-        [InlineKeyboardButton("📁 Browse", callback_data=f"browse_dir:{project['project_path']}")],
+        [InlineKeyboardButton("📁 Browse", callback_data=f"browse_project:{project['id']}")],
         [InlineKeyboardButton("📊 Sync History", callback_data=f"synclogs:{project['id']}")],
     ]
     await update.message.reply_text(

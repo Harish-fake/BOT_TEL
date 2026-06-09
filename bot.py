@@ -53,6 +53,7 @@ from services.file_service import FileService
 from services.file_tracker import FileTracker
 import time
 from datetime import datetime
+from typing import Optional
 
 
 def setup_logging() -> None:
@@ -383,7 +384,7 @@ async def handle_callback_routing(update: Update, context: ContextTypes.DEFAULT_
         await browse_select_project(update, context)
 
 
-application: Application = None
+application: Optional["Application"] = None
 _synced_notified: set[int] = set()
 
 
@@ -572,7 +573,6 @@ def main() -> None:
 
     logger.info("GitSync Bot starting. Polling for updates...")
 
-    import time
     time.sleep(5)
 
     application.run_polling(

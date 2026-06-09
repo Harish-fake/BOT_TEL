@@ -1,7 +1,6 @@
 import os
 import zipfile
 import shutil
-import uuid
 from pathlib import Path
 from typing import Optional
 from config import config

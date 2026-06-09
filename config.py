@@ -1,5 +1,4 @@
 import os
-import socket
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
@@ -9,7 +8,6 @@ load_dotenv()
 @dataclass
 class Config:
     BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
-    GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
     ADMIN_IDS: list[int] = field(
         default_factory=lambda: [
             int(x.strip())

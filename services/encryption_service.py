@@ -1,14 +1,17 @@
+import os
 import hashlib
 import base64
 from cryptography.fernet import Fernet
-from config import config
 
 
 class EncryptionService:
 
     @staticmethod
     def _get_key() -> bytes:
-        raw = config.BOT_TOKEN.encode()
+        raw = os.environ.get("ENCRYPTION_KEY", "").encode()
+        if not raw:
+            from config import config
+            raw = config.BOT_TOKEN.encode()
         key = hashlib.sha256(raw).digest()
         return base64.urlsafe_b64encode(key)
 
