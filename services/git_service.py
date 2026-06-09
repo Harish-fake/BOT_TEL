@@ -20,7 +20,9 @@ class GitService:
         except InvalidGitRepositoryError:
             repo = Repo.init(project_path, initial_branch=branch)
 
-        if not repo.head.is_valid():
+        try:
+            repo.head.commit
+        except Exception:
             gitignore_path = os.path.join(project_path, ".gitignore")
             if not os.path.exists(gitignore_path):
                 try:
@@ -28,6 +30,12 @@ class GitService:
                         f.write("*.pyc\n__pycache__/\n.env\n.venv/\nvenv/\n")
                 except Exception:
                     pass
+            marker_path = os.path.join(project_path, ".gitsync")
+            try:
+                with open(marker_path, "w") as f:
+                    f.write(f"GitSync Bot — {datetime.now(IST).strftime('%Y-%m-%d %I:%M %p IST')}\n")
+            except Exception:
+                pass
             try:
                 repo.index.add(A=True)
                 repo.index.commit("Initial commit")

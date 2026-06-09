@@ -1,7 +1,10 @@
 import os
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from git import Repo, InvalidGitRepositoryError, GitCommandError
 from analyzer import ProjectAnalyzer
+
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 class GitHubManagerError(Exception):
@@ -9,6 +12,14 @@ class GitHubManagerError(Exception):
 
 
 class GitHubManager:
+
+    @staticmethod
+    def _has_commits(repo: Repo) -> bool:
+        try:
+            repo.head.commit
+            return True
+        except (ValueError, KeyError, IndexError):
+            return False
 
     @staticmethod
     def init_repo(
@@ -28,44 +39,52 @@ class GitHubManager:
         else:
             origin = repo.create_remote("origin", repo_url)
 
-        if not repo.head.is_valid():
+        # Ensure at least one commit exists so 'main' branch is valid
+        if not GitHubManager._has_commits(repo):
             techs = ProjectAnalyzer().analyze(project_path)["technologies"]
             gitignore_content = ProjectAnalyzer.generate_gitignore(techs)
             gitignore_path = os.path.join(project_path, ".gitignore")
             with open(gitignore_path, "w") as f:
                 f.write(gitignore_content)
-            repo.index.add([".gitignore"])
+
+            # Write a unique marker file to guarantee a change exists
+            marker_path = os.path.join(project_path, ".gitsync")
+            now = datetime.now(IST).strftime("%Y-%m-%d %I:%M %p IST")
+            with open(marker_path, "w") as f:
+                f.write(f"GitSync Bot — initialized {now}\n")
+
+            repo.index.add([".gitignore", ".gitsync"])
             try:
                 repo.index.commit("Initial commit")
             except Exception:
-                # .gitignore may already be tracked — commit all files instead
                 repo.index.add(A=True)
                 repo.index.commit("Initial commit")
 
+        # Force the branch name
         try:
-            repo.active_branch.name
+            current = repo.active_branch.name
+            if current != branch:
+                repo.git.branch("-M", branch)
         except TypeError:
             repo.git.branch("-M", branch)
 
-        origin = repo.remotes.origin
+        # Auth and push
         auth_url = repo_url.replace("https://", f"https://{token}@")
         origin.set_url(auth_url)
 
         try:
-            if repo.head.is_valid():
+            try:
+                origin.fetch()
                 try:
-                    origin.fetch()
-                    try:
-                        repo.git.rebase(f"origin/{branch}")
-                    except GitCommandError:
-                        repo.git.merge(f"origin/{branch}", "--no-edit")
-                except Exception:
-                    pass
-                push_info = origin.push(refspec=f"{branch}:{branch}")
-                if push_info and push_info[0] and push_info[0].flags & 128:
-                    raise GitHubManagerError(
-                        f"Push rejected: {push_info[0].summary}"
-                    )
+                    repo.git.rebase(f"origin/{branch}")
+                except GitCommandError:
+                    repo.git.merge(f"origin/{branch}", "--no-edit")
+            except Exception:
+                pass
+
+            push_info = origin.push(refspec=f"{branch}:{branch}")
+            if push_info and push_info[0] and push_info[0].flags & 128:
+                raise GitHubManagerError(f"Push rejected: {push_info[0].summary}")
         except GitHubManagerError:
             raise
         except Exception as e:
