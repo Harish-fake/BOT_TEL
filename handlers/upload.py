@@ -60,7 +60,7 @@ async def receive_zip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         if file.file_size and file.file_size > 50 * 1024 * 1024:
             await status_msg.edit_text(
                 f"❌ File too large ({size_mb:.1f} MB). Telegram's limit is 50 MB.\n"
-                "Please split your ZIP into smaller parts."
+                "Use /webupload to upload files up to 2 GB via browser."
             )
             return ConversationHandler.END
 
@@ -88,7 +88,7 @@ async def receive_zip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         if "too big" in err or "413" in err:
             await status_msg.edit_text(
                 "❌ File too large. Telegram's bot API has a 50 MB download limit.\n"
-                "Please split your ZIP into smaller parts."
+                "Use /webupload to upload files up to 2 GB via browser."
             )
         else:
             await status_msg.edit_text(f"❌ Download failed: {err}")

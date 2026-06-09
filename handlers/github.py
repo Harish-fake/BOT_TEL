@@ -184,7 +184,7 @@ async def receive_repo_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         lines = [
             f"✅ *GitHub Integration Successful!*",
             f"Repository: `{url}`",
-            f"Branch: `{result['branch']}`",
+            f"Branch: `{result.get('branch', 'main')}`",
             f"",
         ]
         if pushed_so_far > 0:

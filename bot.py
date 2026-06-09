@@ -473,70 +473,88 @@ def main() -> None:
         logger.info(f"Processing web upload for user {telegram_id}: {filename}")
 
         try:
-            ZipService.validate(zip_path)
-        except ZipValidationError as e:
             try:
-                bot = application.bot
-                await bot.send_message(chat_id=telegram_id, text=f"❌ Validation failed: {e}")
-            except Exception:
-                pass
-            ZipService.cleanup(zip_path)
-            return
+                ZipService.validate(zip_path)
+            except ZipValidationError as e:
+                try:
+                    bot = application.bot
+                    await bot.send_message(
+                        chat_id=telegram_id,
+                        text=f"❌ Validation failed: {e}\n\nTry /webupload again with a valid ZIP.",
+                    )
+                except Exception:
+                    pass
+                ZipService.cleanup(zip_path)
+                return
 
-        project_id_hex = _uuid.uuid4().hex
-        project_name = _os.path.splitext(filename)[0]
-        extract_path = _os.path.join("storage", "projects", project_id_hex)
+            project_id_hex = _uuid.uuid4().hex
+            project_name = _os.path.splitext(filename)[0]
+            extract_path = _os.path.join("storage", "projects", project_id_hex)
 
-        try:
-            ZipService.extract(zip_path, extract_path)
-        except ZipValidationError as e:
-            ZipService.cleanup(zip_path)
-            ZipService.cleanup(extract_path)
             try:
-                bot = application.bot
-                await bot.send_message(chat_id=telegram_id, text=f"❌ Extraction failed: {e}")
-            except Exception:
-                pass
-            return
-        finally:
-            ZipService.cleanup(zip_path)
+                ZipService.extract(zip_path, extract_path)
+            except ZipValidationError as e:
+                ZipService.cleanup(zip_path)
+                ZipService.cleanup(extract_path)
+                try:
+                    bot = application.bot
+                    await bot.send_message(
+                        chat_id=telegram_id,
+                        text=f"❌ Extraction failed: {e}\n\nTry /webupload again.",
+                    )
+                except Exception:
+                    pass
+                return
+            finally:
+                ZipService.cleanup(zip_path)
 
-        analyzer = ProjectAnalyzer()
-        analysis = analyzer.analyze(extract_path)
+            analyzer = ProjectAnalyzer()
+            analysis = analyzer.analyze(extract_path)
 
-        user_db = db.get_user_by_telegram_id(telegram_id)
-        if not user_db:
-            ZipService.cleanup(extract_path)
-            return
+            user_db = db.get_user_by_telegram_id(telegram_id)
+            if not user_db:
+                ZipService.cleanup(extract_path)
+                return
 
-        project_id = db.add_project(user_db["id"], project_name, extract_path)
-        report = ReportService.analysis_report(
-            project_name,
-            analysis["files"],
-            analysis["folders"],
-            analysis["loc"],
-            analysis["technologies"],
-        )
-
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-        keyboard = [
-            [InlineKeyboardButton("📁 Browse Files", callback_data="browse_root")],
-            [InlineKeyboardButton("🔗 Link GitHub", callback_data="link_github")],
-            [InlineKeyboardButton("⏰ Set Schedule", callback_data="set_schedule")],
-            [InlineKeyboardButton("📋 My Projects", callback_data="list_projects")],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        try:
-            bot = application.bot
-            await bot.send_message(
-                chat_id=telegram_id,
-                text=f"✅ *Project Uploaded Successfully via Web!*\n\n{report}",
-                parse_mode="Markdown",
-                reply_markup=reply_markup,
+            project_id = db.add_project(user_db["id"], project_name, extract_path)
+            report = ReportService.analysis_report(
+                project_name,
+                analysis["files"],
+                analysis["folders"],
+                analysis["loc"],
+                analysis["technologies"],
             )
+
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            keyboard = [
+                [InlineKeyboardButton("📁 Browse Files", callback_data="browse_root")],
+                [InlineKeyboardButton("🔗 Link GitHub", callback_data="link_github")],
+                [InlineKeyboardButton("⏰ Set Schedule", callback_data="set_schedule")],
+                [InlineKeyboardButton("📋 My Projects", callback_data="list_projects")],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            try:
+                bot = application.bot
+                await bot.send_message(
+                    chat_id=telegram_id,
+                    text=f"✅ *Project Uploaded Successfully via Web!*\n\n{report}",
+                    parse_mode="Markdown",
+                    reply_markup=reply_markup,
+                )
+            except Exception as e:
+                logger.error(f"Failed to notify user {telegram_id}: {e}")
+
         except Exception as e:
-            logger.error(f"Failed to notify user {telegram_id}: {e}")
+            logger.exception(f"Web upload processing failed for user {telegram_id}")
+            try:
+                bot = application.bot
+                await bot.send_message(
+                    chat_id=telegram_id,
+                    text=f"❌ Upload processing failed: {e}\n\nTry /webupload again.",
+                )
+            except Exception:
+                pass
 
     from services.upload_server import set_upload_processor
     set_upload_processor(process_web_upload)
