@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 import os
 JOB_STORE_URL = os.environ.get("DATABASE_URL", "sqlite:///database/apscheduler.db")
-if JOB_STORE_URL.startswith("postgres"):
+if JOB_STORE_URL.startswith("postgres://"):
     JOB_STORE_URL = "postgresql" + JOB_STORE_URL[len("postgres"):]
 
 # Module-level callback registry so APScheduler doesn't try to pickle a

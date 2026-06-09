@@ -64,7 +64,8 @@ class Database:
 
     def _e(self, sql: str, params: tuple = ()) -> "CursorProxy":
         if self._pg:
-            cur = self.conn.execute(sql, params)
+            cur = self.conn.cursor()
+            cur.execute(sql, params)
         else:
             cur = self.conn.execute(sql.replace("%s", "?"), params)
         return CursorProxy(cur, self._pg)
