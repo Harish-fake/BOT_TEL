@@ -44,6 +44,7 @@ from handlers.github import get_github_handler
 from handlers.status import status_command, pushnow_command, projects_command
 from handlers.settings import get_schedule_handler
 from handlers.admin import admin_users, admin_projects, admin_stats, admin_logs, admin_broadcast
+from handlers.upload_web import webupload_command
 
 # ── Sync callback (used by scheduler) ─────────────────────
 from project_manager import ProjectManager
@@ -405,22 +406,9 @@ def check_network() -> bool:
 
 
 def _start_health_server() -> None:
+    from services.upload_server import start_upload_server
     port = int(os.environ.get("PORT", 8080))
-
-    class HealthHandler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self) -> None:
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"OK")
-
-        def log_message(self, fmt, *args) -> None:
-            pass
-
-    server = http.server.HTTPServer(("0.0.0.0", port), HealthHandler)
-    logger = logging.getLogger(__name__)
-    logger.info(f"Health server listening on port {port}")
-    server.serve_forever()
+    start_upload_server(port)
 
 
 def main() -> None:
@@ -475,6 +463,84 @@ def main() -> None:
         .build()
     )
 
+    async def process_web_upload(telegram_id: int, zip_path: str, filename: str) -> None:
+        from services.zip_service import ZipService, ZipValidationError
+        from analyzer import ProjectAnalyzer
+        from services.report_service import ReportService
+        import uuid as _uuid
+        import os as _os
+
+        logger.info(f"Processing web upload for user {telegram_id}: {filename}")
+
+        try:
+            ZipService.validate(zip_path)
+        except ZipValidationError as e:
+            try:
+                bot = application.bot
+                await bot.send_message(chat_id=telegram_id, text=f"❌ Validation failed: {e}")
+            except Exception:
+                pass
+            ZipService.cleanup(zip_path)
+            return
+
+        project_id_hex = _uuid.uuid4().hex
+        project_name = _os.path.splitext(filename)[0]
+        extract_path = _os.path.join("storage", "projects", project_id_hex)
+
+        try:
+            ZipService.extract(zip_path, extract_path)
+        except ZipValidationError as e:
+            ZipService.cleanup(zip_path)
+            ZipService.cleanup(extract_path)
+            try:
+                bot = application.bot
+                await bot.send_message(chat_id=telegram_id, text=f"❌ Extraction failed: {e}")
+            except Exception:
+                pass
+            return
+        finally:
+            ZipService.cleanup(zip_path)
+
+        analyzer = ProjectAnalyzer()
+        analysis = analyzer.analyze(extract_path)
+
+        user_db = db.get_user_by_telegram_id(telegram_id)
+        if not user_db:
+            ZipService.cleanup(extract_path)
+            return
+
+        project_id = db.add_project(user_db["id"], project_name, extract_path)
+        report = ReportService.analysis_report(
+            project_name,
+            analysis["files"],
+            analysis["folders"],
+            analysis["loc"],
+            analysis["technologies"],
+        )
+
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        keyboard = [
+            [InlineKeyboardButton("📁 Browse Files", callback_data="browse_root")],
+            [InlineKeyboardButton("🔗 Link GitHub", callback_data="link_github")],
+            [InlineKeyboardButton("⏰ Set Schedule", callback_data="set_schedule")],
+            [InlineKeyboardButton("📋 My Projects", callback_data="list_projects")],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        try:
+            bot = application.bot
+            await bot.send_message(
+                chat_id=telegram_id,
+                text=f"✅ *Project Uploaded Successfully via Web!*\n\n{report}",
+                parse_mode="Markdown",
+                reply_markup=reply_markup,
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify user {telegram_id}: {e}")
+
+    from services.upload_server import set_upload_processor
+    set_upload_processor(process_web_upload)
+
     # ── Register handlers ──────────────────────────────
 
     # Basic commands
@@ -482,6 +548,9 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("about", about))
     application.add_handler(CommandHandler("menu", main_menu_command))
+
+    # Web upload
+    application.add_handler(CommandHandler("webupload", webupload_command))
 
     # Upload conversation
     upload_conv = ConversationHandler(
