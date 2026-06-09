@@ -13,4 +13,4 @@ COPY . .
 
 RUN mkdir -p storage/projects storage/temp storage/logs database
 
-CMD ["python", "bot.py"]
+CMD ["python", "start.py"]
