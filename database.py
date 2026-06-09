@@ -1,9 +1,12 @@
 import os
+import logging
 import sqlite3
 import threading
 from datetime import datetime
 from typing import Optional
 from config import config
+
+logger = logging.getLogger(__name__)
 
 
 class Database:
@@ -46,10 +49,18 @@ class Database:
         import psycopg2
         from psycopg2.extras import RealDictCursor
 
-        self.conn = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
-        self.conn.autocommit = False
-        self._pg = True
-        self._init_schema()
+        if not db_url.startswith("postgres"):
+            logger.warning(f"DATABASE_URL does not look like a PostgreSQL URL (starts with '{db_url[:20]}...'). Falling back to SQLite.")
+            return self._init_sqlite()
+
+        try:
+            self.conn = psycopg2.connect(db_url, cursor_factory=RealDictCursor, connect_timeout=10)
+            self.conn.autocommit = False
+            self._pg = True
+            self._init_schema()
+        except Exception as e:
+            logger.warning(f"PostgreSQL connection failed: {e}. Falling back to SQLite.")
+            self._init_sqlite()
 
     def _e(self, sql: str, params: tuple = ()) -> "CursorProxy":
         if self._pg:
