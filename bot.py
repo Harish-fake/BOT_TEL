@@ -431,20 +431,26 @@ def main() -> None:
     async def _keep_alive() -> None:
         import asyncio
         public_url = os.environ.get("RENDER_EXTERNAL_URL", os.environ.get("PUBLIC_URL", ""))
+        retry = 1
         while True:
-            await asyncio.sleep(600)
+            await asyncio.sleep(300 if public_url else 60)
             try:
                 if public_url:
                     import httpx
-                    async with httpx.AsyncClient(timeout=10) as c:
-                        await c.get(f"{public_url}/health")
+                    async with httpx.AsyncClient(timeout=15) as c:
+                        r = await c.get(f"{public_url}/health")
+                        r.raise_for_status()
                 else:
                     port = int(os.environ.get("PORT", 8080))
                     reader, writer = await asyncio.open_connection("localhost", port)
                     writer.close()
                     await writer.wait_closed()
+                retry = 1
             except Exception:
-                pass
+                wait = min(retry * 15, 300)
+                logger.warning(f"Keep-alive failed, retrying in {wait}s (attempt {retry})")
+                await asyncio.sleep(wait)
+                retry += 1
 
     async def post_init(app: Application) -> None:
         scheduler_manager.start()
@@ -480,7 +486,7 @@ def main() -> None:
                     bot = application.bot
                     await bot.send_message(
                         chat_id=telegram_id,
-                        text=f"❌ Validation failed: {e}\n\nTry /webupload again with a valid ZIP.",
+                        text=f"❌ Validation failed: {e}\n\nTry /upload via Telegram with a valid ZIP file.",
                     )
                 except Exception:
                     pass
@@ -500,7 +506,7 @@ def main() -> None:
                     bot = application.bot
                     await bot.send_message(
                         chat_id=telegram_id,
-                        text=f"❌ Extraction failed: {e}\n\nTry /webupload again.",
+                        text=f"❌ Extraction failed: {e}\n\nTry /upload via Telegram with a valid ZIP file.",
                     )
                 except Exception:
                     pass
@@ -551,7 +557,7 @@ def main() -> None:
                 bot = application.bot
                 await bot.send_message(
                     chat_id=telegram_id,
-                    text=f"❌ Upload processing failed: {e}\n\nTry /webupload again.",
+                    text=f"❌ Upload processing failed: {e}\n\nTry /upload via Telegram with a valid ZIP file.",
                 )
             except Exception:
                 pass
@@ -663,11 +669,25 @@ def main() -> None:
 
     time.sleep(5)
 
-    application.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True,
-        bootstrap_retries=5,
-    )
+    # ── 24/7 Uptime Loop ──────────────────────────────
+    for cycle in range(1, 10001):
+        try:
+            application.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True,
+                bootstrap_retries=5,
+            )
+            logger.info("Polling stopped cleanly.")
+            break
+        except Exception as e:
+            logger.exception(f"Polling cycle {cycle} crashed: {e}")
+            try:
+                scheduler_manager.stop()
+            except Exception:
+                pass
+            wait = min(30 * cycle, 300)
+            logger.info(f"Restarting in {wait}s (cycle {cycle})...")
+            time.sleep(wait)
 
 
 if __name__ == "__main__":

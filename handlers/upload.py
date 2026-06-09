@@ -91,7 +91,10 @@ async def receive_zip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
                 "Use /webupload to upload files up to 2 GB via browser."
             )
         else:
-            await status_msg.edit_text(f"❌ Download failed: {err}")
+            await status_msg.edit_text(
+                f"❌ Download failed: {err}\n\n"
+                "Try /webupload to upload files up to 2 GB via browser."
+            )
         return ConversationHandler.END
 
     try:
@@ -99,7 +102,10 @@ async def receive_zip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         ZipService.validate(zip_path)
     except ZipValidationError as e:
         ZipService.cleanup(zip_path)
-        await status_msg.edit_text(f"❌ Validation failed: {e}")
+        await status_msg.edit_text(
+            f"❌ Validation failed: {e}\n\n"
+            "Use /webupload to upload files up to 2 GB via browser."
+        )
         return ConversationHandler.END
 
     project_id_hex = uuid.uuid4().hex
@@ -112,7 +118,10 @@ async def receive_zip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     except ZipValidationError as e:
         ZipService.cleanup(zip_path)
         ZipService.cleanup(extract_path)
-        await status_msg.edit_text(f"❌ Extraction failed: {e}")
+        await status_msg.edit_text(
+            f"❌ Extraction failed: {e}\n\n"
+            "Use /webupload to upload files up to 2 GB via browser."
+        )
         return ConversationHandler.END
     finally:
         ZipService.cleanup(zip_path)
