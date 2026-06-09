@@ -139,11 +139,14 @@ class Database:
             );
         """
         if self._pg:
-            self.conn.execute(schema)
+            self.conn.cursor().execute(schema)
         else:
             self.conn.executescript(schema)
         try:
-            self.conn.execute("ALTER TABLE projects ADD COLUMN batch_size INTEGER DEFAULT 4")
+            if self._pg:
+                self.conn.cursor().execute("ALTER TABLE projects ADD COLUMN batch_size INTEGER DEFAULT 4")
+            else:
+                self.conn.execute("ALTER TABLE projects ADD COLUMN batch_size INTEGER DEFAULT 4")
         except Exception:
             pass
         self.conn.commit()
