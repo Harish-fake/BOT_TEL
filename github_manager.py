@@ -1,6 +1,6 @@
 import os
 from typing import Optional
-from git import Repo, InvalidGitRepositoryError
+from git import Repo, InvalidGitRepositoryError, GitCommandError
 from analyzer import ProjectAnalyzer
 
 
@@ -32,10 +32,14 @@ class GitHubManager:
             techs = ProjectAnalyzer().analyze(project_path)["technologies"]
             gitignore_content = ProjectAnalyzer.generate_gitignore(techs)
             gitignore_path = os.path.join(project_path, ".gitignore")
-            if not os.path.exists(gitignore_path):
-                with open(gitignore_path, "w") as f:
-                    f.write(gitignore_content)
-                repo.index.add([".gitignore"])
+            with open(gitignore_path, "w") as f:
+                f.write(gitignore_content)
+            repo.index.add([".gitignore"])
+            try:
+                repo.index.commit("Initial commit")
+            except Exception:
+                # .gitignore may already be tracked — commit all files instead
+                repo.index.add(A=True)
                 repo.index.commit("Initial commit")
 
         try:
@@ -49,6 +53,14 @@ class GitHubManager:
 
         try:
             if repo.head.is_valid():
+                try:
+                    origin.fetch()
+                    try:
+                        repo.git.rebase(f"origin/{branch}")
+                    except GitCommandError:
+                        repo.git.merge(f"origin/{branch}", "--no-edit")
+                except Exception:
+                    pass
                 push_info = origin.push(refspec=f"{branch}:{branch}")
                 if push_info and push_info[0] and push_info[0].flags & 128:
                     raise GitHubManagerError(

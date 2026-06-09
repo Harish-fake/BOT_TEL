@@ -29,7 +29,7 @@ class GitService:
                 except Exception:
                     pass
             try:
-                repo.index.add([".gitignore"])
+                repo.index.add(A=True)
                 repo.index.commit("Initial commit")
             except Exception:
                 pass
