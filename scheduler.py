@@ -22,13 +22,9 @@ def now_ist() -> str:
 logger = logging.getLogger(__name__)
 
 import os
-from config import config
-if os.environ.get("DATABASE_URL"):
-    JOB_STORE_URL = os.environ.get("DATABASE_URL")
-    if JOB_STORE_URL.startswith("postgres://"):
-        JOB_STORE_URL = "postgresql" + JOB_STORE_URL[len("postgres"):]
-else:
-    JOB_STORE_URL = f"sqlite:///{config.DATABASE_PATH}"
+JOB_STORE_URL = os.environ.get("DATABASE_URL") or "sqlite:///database/apscheduler.db"
+if JOB_STORE_URL.startswith("postgres://"):
+    JOB_STORE_URL = "postgresql" + JOB_STORE_URL[len("postgres"):]
 
 # Module-level callback registry so APScheduler doesn't try to pickle a
 # scheduler instance when serializing job references.

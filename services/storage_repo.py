@@ -7,8 +7,10 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 
 STORAGE_DIR = os.path.join("storage", "repo_backup")
-DB_SOURCE = os.path.join("database", "bot.db")
-DB_FILE = "bot.db"
+DB_FILES = ["bot.db", "apscheduler.db"]
+
+def _db_source(name: str) -> str:
+    return os.path.join("database", name)
 
 STORAGE_REPO_NAME = "gitsync-bot-storage"
 
@@ -76,16 +78,21 @@ class StorageRepo:
     def restore(self) -> bool:
         if not self._enabled:
             return False
-        db_path = os.path.abspath(DB_SOURCE)
+        repo_path = os.path.abspath(STORAGE_DIR)
         try:
             repo = self._get_repo()
             repo.remotes.origin.fetch()
             repo.git.reset("--hard", "origin/main")
-            stored_db = os.path.join(os.path.abspath(STORAGE_DIR), DB_FILE)
-            if os.path.exists(stored_db):
-                os.makedirs(os.path.dirname(db_path), exist_ok=True)
-                shutil.copy2(stored_db, db_path)
-                logger.info("Database restored from storage repo.")
+            restored = False
+            for fname in DB_FILES:
+                stored = os.path.join(repo_path, fname)
+                dst = os.path.abspath(_db_source(fname))
+                if os.path.exists(stored):
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.copy2(stored, dst)
+                    logger.info("Restored %s from storage repo.", fname)
+                    restored = True
+            if restored:
                 return True
             logger.info("No existing database in storage repo (fresh start).")
             return False
@@ -102,15 +109,19 @@ class StorageRepo:
     def backup(self) -> bool:
         if not self._enabled:
             return False
-        db_path = os.path.abspath(DB_SOURCE)
-        if not os.path.exists(db_path):
-            return False
         try:
             repo = self._get_repo()
             origin = repo.remotes.origin
             repo_path = os.path.abspath(STORAGE_DIR)
-            shutil.copy2(db_path, os.path.join(repo_path, DB_FILE))
-            repo.index.add([DB_FILE])
+            copied = False
+            for fname in DB_FILES:
+                src = os.path.abspath(_db_source(fname))
+                if os.path.exists(src):
+                    shutil.copy2(src, os.path.join(repo_path, fname))
+                    copied = True
+            if not copied:
+                return False
+            repo.index.add(DB_FILES)
             if repo.index.diff("HEAD") or repo.untracked_files:
                 ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
                 repo.index.commit(f"backup {ts}")
@@ -119,7 +130,7 @@ class StorageRepo:
                 origin.set_url(auth_url)
                 origin.push(refspec="main:main", force=True)
                 origin.set_url(old_url)
-                logger.info("Database backed up to storage repo.")
+                logger.info("Databases backed up to storage repo.")
             self._dirty = False
             return True
         except Exception as e:
