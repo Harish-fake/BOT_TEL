@@ -66,7 +66,7 @@ class ZipService:
 
     @staticmethod
     def save_temp_file(file_bytes: bytes, filename: str) -> str:
-        temp_dir = os.path.join("storage", "temp")
+        temp_dir = os.path.join(os.getcwd(), "storage", "temp")
         os.makedirs(temp_dir, exist_ok=True)
         safe_name = f"{uuid.uuid4().hex}_{filename}"
         dest = os.path.join(temp_dir, safe_name)

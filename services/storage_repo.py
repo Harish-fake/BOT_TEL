@@ -1,16 +1,15 @@
 import os
 import shutil
+import sqlite3
 import logging
 import threading
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-STORAGE_DIR = os.path.join("storage", "repo_backup")
+_DB_DIR = os.path.join(os.getcwd(), "database")
+STORAGE_DIR = os.path.join(os.getcwd(), "storage", "repo_backup")
 DB_FILES = ["bot.db", "apscheduler.db"]
-
-def _db_source(name: str) -> str:
-    return os.path.join("database", name)
 
 STORAGE_REPO_NAME = "gitsync-bot-storage"
 
@@ -29,6 +28,22 @@ def _default_storage_url() -> str:
     except Exception:
         pass
     return ""
+
+
+def _safe_copy_db(src: str, dst: str) -> None:
+    if not os.path.exists(src):
+        return
+    src_conn = sqlite3.connect(src, timeout=30)
+    src_conn.execute("PRAGMA busy_timeout=30000")
+    try:
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        dst_conn = sqlite3.connect(dst)
+        try:
+            src_conn.backup(dst_conn)
+        finally:
+            dst_conn.close()
+    finally:
+        src_conn.close()
 
 
 class StorageRepo:
@@ -86,10 +101,10 @@ class StorageRepo:
             restored = False
             for fname in DB_FILES:
                 stored = os.path.join(repo_path, fname)
-                dst = os.path.abspath(_db_source(fname))
+                dst = os.path.join(_DB_DIR, fname)
                 if os.path.exists(stored):
-                    os.makedirs(os.path.dirname(dst), exist_ok=True)
-                    shutil.copy2(stored, dst)
+                    os.makedirs(_DB_DIR, exist_ok=True)
+                    _safe_copy_db(stored, dst)
                     logger.info("Restored %s from storage repo.", fname)
                     restored = True
             if restored:
@@ -115,9 +130,10 @@ class StorageRepo:
             repo_path = os.path.abspath(STORAGE_DIR)
             copied = False
             for fname in DB_FILES:
-                src = os.path.abspath(_db_source(fname))
+                src = os.path.join(_DB_DIR, fname)
                 if os.path.exists(src):
-                    shutil.copy2(src, os.path.join(repo_path, fname))
+                    dst = os.path.join(repo_path, fname)
+                    _safe_copy_db(src, dst)
                     copied = True
             if not copied:
                 return False

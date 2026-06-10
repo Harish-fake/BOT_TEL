@@ -101,7 +101,7 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def admin_logs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await is_admin(update):
         return
-    log_path = os.path.join("storage", "logs", "bot.log")
+    log_path = os.path.join(os.getcwd(), "storage", "logs", "bot.log")
     if not os.path.exists(log_path):
         await update.message.reply_text("No log file found.")
         return

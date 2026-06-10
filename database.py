@@ -41,9 +41,12 @@ class Database:
     # ── Backend init ────────────────────────────────────────
 
     def _init_sqlite(self) -> None:
-        os.makedirs(os.path.dirname(config.DATABASE_PATH), exist_ok=True)
+        db_path = config.DATABASE_PATH
+        if not os.path.isabs(db_path):
+            db_path = os.path.join(os.getcwd(), db_path)
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self.conn: sqlite3.Connection = sqlite3.connect(
-            config.DATABASE_PATH, timeout=30, check_same_thread=False
+            db_path, timeout=30, check_same_thread=False
         )
         self.conn.row_factory = lambda c, r: {col[0]: r[i] for i, col in enumerate(c.description)}
         self.conn.execute("PRAGMA journal_mode=WAL")

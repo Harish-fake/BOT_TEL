@@ -60,8 +60,9 @@ from typing import Optional
 
 
 def setup_logging() -> None:
-    os.makedirs(os.path.join("storage", "logs"), exist_ok=True)
-    log_path = os.path.join("storage", "logs", "bot.log")
+    log_dir = os.path.join(os.getcwd(), "storage", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "bot.log")
 
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -504,7 +505,7 @@ def main() -> None:
 
             project_id_hex = _uuid.uuid4().hex
             project_name = _os.path.splitext(filename)[0]
-            extract_path = _os.path.join("storage", "projects", project_id_hex)
+            extract_path = _os.path.join(os.getcwd(), "storage", "projects", project_id_hex)
 
             try:
                 ZipService.extract(zip_path, extract_path)

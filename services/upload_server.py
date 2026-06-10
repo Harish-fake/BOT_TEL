@@ -3,7 +3,7 @@ from typing import Optional, Callable, Awaitable
 
 logger = logging.getLogger(__name__)
 
-UPLOAD_DIR = os.path.join("storage", "temp")
+UPLOAD_DIR = os.path.join(os.getcwd(), "storage", "temp")
 MAX_UPLOAD_SIZE = 1024 * 1024 * 1024 * 2  # 2 GB
 SESSION_TTL = 3600  # 1 hour
 

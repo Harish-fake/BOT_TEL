@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 WAITING_FOR_ZIP = 1
 
-PROJECTS_DIR = os.path.join("storage", "projects")
+PROJECTS_DIR = os.path.join(os.getcwd(), "storage", "projects")
 
 
 async def upload_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
