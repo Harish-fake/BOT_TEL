@@ -115,6 +115,8 @@ SUCCESS_PAGE = """<!DOCTYPE html>
 
 
 class UploadHTTPHandler(http.server.BaseHTTPRequestHandler):
+    default_request_version = "HTTP/1.0"
+
     def do_GET(self) -> None:
         try:
             parsed = urllib.parse.urlparse(self.path)
@@ -243,45 +245,33 @@ class UploadHTTPHandler(http.server.BaseHTTPRequestHandler):
             daemon=True,
         ).start()
 
-    def _send_text(self, text: str, status: int = 200) -> None:
+    def _respond(self, body: bytes, content_type: str, status: int = 200) -> None:
         try:
-            body = text.encode()
             self.send_response(status)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
             self.end_headers()
             self.wfile.write(body)
+            self.wfile.flush()
         except Exception:
             pass
+
+    def _send_text(self, text: str, status: int = 200) -> None:
+        self._respond(text.encode(), "text/plain; charset=utf-8", status)
 
     def _send_html(self, html: str, status: int = 200) -> None:
-        try:
-            body = html.encode()
-            self.send_response(status)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-        except Exception:
-            pass
+        self._respond(html.encode(), "text/html; charset=utf-8", status)
 
     def _send_error(self, message: str) -> None:
-        try:
-            body = f"Error: {message}".encode()
-            self.send_response(500)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-        except Exception:
-            pass
+        self._respond(f"Error: {message}".encode(), "text/plain; charset=utf-8", 500)
 
     def log_message(self, fmt: str, *args) -> None:
         logger.debug(f"WEB: {fmt % args}")
 
 
 def start_upload_server(port: int) -> None:
-    server = http.server.HTTPServer(("0.0.0.0", port), UploadHTTPHandler)
+    server = http.server.ThreadingHTTPServer(("0.0.0.0", port), UploadHTTPHandler)
     server.timeout = 120
     logger.info(f"Upload server listening on port {port}")
     server.serve_forever()
