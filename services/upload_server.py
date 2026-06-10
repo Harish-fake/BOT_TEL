@@ -66,7 +66,7 @@ def _trigger_processing(telegram_id: int, file_path: str, filename: str) -> None
 def _cleanup() -> None:
     now = time.time()
     with _lock:
-        expired = [t for t, s in sessions.items() if now - s["created_at"] > SESSION_TTL]
+        expired = [t for t, s in sessions.items() if now - s.get("created_at", 0) > SESSION_TTL]
         for t in expired:
             del sessions[t]
     threading.Timer(300, _cleanup).start()
@@ -75,63 +75,81 @@ def _cleanup() -> None:
 _cleanup()
 
 
-def _parse_multipart(body: bytes, boundary: str) -> dict:
-    """Parse multipart/form-data and return {field_name: (filename, content)}."""
-    result = {}
-    parts = body.split(f"--{boundary}".encode())
-    for part in parts:
-        if not part or part in (b"\r\n", b"--\r\n", b"--"):
-            continue
-        header_end = part.find(b"\r\n\r\n")
-        if header_end == -1:
-            continue
-        headers_raw = part[:header_end].decode("utf-8", errors="replace")
-        content = part[header_end + 4:]
-        if content.endswith(b"\r\n"):
-            content = content[:-2]
-        name = None
-        filename = None
-        for h in headers_raw.split("\r\n"):
-            h = h.lower()
-            if h.startswith("content-disposition:"):
-                for seg in h.split(";"):
-                    seg = seg.strip()
-                    if seg.startswith('name="'):
-                        name = seg[6:-1]
-                    elif seg.startswith('filename="'):
-                        filename = seg[10:-1]
-        if name:
-            result[name] = (filename, content)
-    return result
+UPLOAD_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Upload Project</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:600px;margin:40px auto;padding:0 20px;color:#333}
+  h1{font-size:1.5rem} .note{color:#666;font-size:0.9rem}
+  input[type=file]{display:block;margin:1rem 0}
+  button{padding:10px 24px;background:#007bff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:1rem}
+  button:hover{background:#0056b3}
+  .error{color:#dc3545;font-weight:bold;margin:1rem 0}
+</style></head>
+<body>
+<h1>Upload Project</h1>
+<p>Select a ZIP file to upload.</p>
+<form method="post" enctype="multipart/form-data" action="UPLOAD_PATH">
+  <input type="file" name="file" accept=".zip" required>
+  <button type="submit">Upload</button>
+</form>
+<p class="note">Maximum file size: 2 GB</p>
+</body></html>"""
+
+SUCCESS_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Upload Complete</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:600px;margin:40px auto;padding:0 20px;color:#333;text-align:center}
+  h1{font-size:1.5rem;color:#28a745} .note{color:#666;font-size:0.9rem}
+</style></head>
+<body>
+<h1>Upload Complete!</h1>
+<p>The bot is now processing your project. Check Telegram for updates.</p>
+<p class="note">You can close this page.</p>
+</body></html>"""
 
 
 class UploadHTTPHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self) -> None:
-        parsed = urllib.parse.urlparse(self.path)
-        if parsed.path == "/health" or parsed.path == "/":
-            self._send_text("OK")
-            return
-        if parsed.path.startswith("/upload/"):
-            token = parsed.path[len("/upload/"):]
-            sess = get_session(token)
-            if sess is None:
-                self._send_text("Invalid or expired upload link.", 404)
+        try:
+            parsed = urllib.parse.urlparse(self.path)
+            if parsed.path in ("/health", "/"):
+                self._send_text("OK")
                 return
-            self._send_html(self._upload_page(token))
-            return
-        self._send_text("Not found", 404)
+            if parsed.path.startswith("/upload/"):
+                token = parsed.path[len("/upload/"):]
+                sess = get_session(token)
+                if sess is None:
+                    self._send_text("Invalid or expired upload link.", 404)
+                    return
+                html = UPLOAD_PAGE.replace("UPLOAD_PATH", f"/upload/{token}")
+                self._send_html(html)
+                return
+            self._send_text("Not found", 404)
+        except Exception as e:
+            logger.exception(f"GET {self.path} error")
+            self._send_error(str(e))
 
     def do_POST(self) -> None:
-        parsed = urllib.parse.urlparse(self.path)
-        if parsed.path.startswith("/upload/"):
-            token = parsed.path[len("/upload/"):]
-            sess = get_session(token)
-            if sess is None:
-                self._send_text("Invalid or expired upload link.", 404)
+        try:
+            parsed = urllib.parse.urlparse(self.path)
+            if parsed.path.startswith("/upload/"):
+                token = parsed.path[len("/upload/"):]
+                sess = get_session(token)
+                if sess is None:
+                    self._send_text("Invalid or expired upload link.", 404)
+                    return
+                self._handle_upload(token, sess)
                 return
-            self._handle_upload(token, sess)
-            return
-        self._send_text("Not found", 404)
+            self._send_text("Not found", 404)
+        except Exception as e:
+            logger.exception(f"POST {self.path} error")
+            self._send_error(str(e))
 
     def _handle_upload(self, token: str, sess: dict) -> None:
         content_type = self.headers.get("Content-Type", "")
@@ -150,99 +168,120 @@ class UploadHTTPHandler(http.server.BaseHTTPRequestHandler):
             self._send_text("File too large (max 2 GB)", 413)
             return
 
-        body = self.rfile.read(length)
         m = re.search(r'boundary=(?:"([^"]+)"|([^;]+))', content_type)
         if not m:
             self._send_text("Could not parse boundary", 400)
             return
         boundary = m.group(1) or m.group(2)
+        boundary_bytes = f"--{boundary}".encode()
 
-        data = _parse_multipart(body, boundary)
-        file_info = data.get("file")
-        if not file_info or not file_info[0]:
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+        filename = None
+        dest = None
+        file_started = False
+        header_buf = b""
+        boundary_marker = b"--" + boundary_bytes[2:]
+
+        remaining = length
+        buf = b""
+
+        while remaining > 0:
+            chunk_size = min(remaining, 65536)
+            chunk = self.rfile.read(chunk_size)
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            buf += chunk
+
+        parts = buf.split(boundary_bytes)
+        for part in parts:
+            if not part or part in (b"\r\n", b"--\r\n", b"--", b"\r\n--\r\n"):
+                continue
+            header_end = part.find(b"\r\n\r\n")
+            if header_end == -1:
+                continue
+            headers_raw = part[:header_end].decode("utf-8", errors="replace")
+            content = part[header_end + 4:]
+            if content.endswith(b"\r\n"):
+                content = content[:-2]
+
+            field_name = None
+            field_filename = None
+            for h in headers_raw.split("\r\n"):
+                h_lower = h.lower()
+                if h_lower.startswith("content-disposition:"):
+                    for seg in h.split(";"):
+                        seg = seg.strip()
+                        if seg.startswith('name="'):
+                            field_name = seg[6:-1]
+                        elif seg.startswith('filename="'):
+                            field_filename = seg[10:-1]
+
+            if field_name == "file" and field_filename:
+                filename = field_filename
+                if not filename.lower().endswith(".zip"):
+                    self._send_text("Only .zip files are accepted.", 400)
+                    return
+                safe_name = re.sub(r"[^a-zA-Z0-9._-]", "_", filename)
+                dest = os.path.join(UPLOAD_DIR, f"{token}_{safe_name}")
+                with open(dest, "wb") as f:
+                    f.write(content)
+                logger.info(f"Uploaded {filename} ({len(content)} bytes) token={token}")
+                break
+
+        if not filename or not dest:
             self._send_text("No file uploaded. Select a ZIP file.", 400)
             return
 
-        filename, content = file_info
-        if not filename.lower().endswith(".zip"):
-            self._send_text("Only .zip files are accepted.", 400)
-            return
-
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
-        safe_name = re.sub(r"[^a-zA-Z0-9._-]", "_", filename)
-        dest = os.path.join(UPLOAD_DIR, f"{token}_{safe_name}")
-        with open(dest, "wb") as f:
-            f.write(content)
-
         update_session(token, status="uploaded", file_path=dest)
-        self._send_html(self._success_page(token))
+        self._send_html(SUCCESS_PAGE)
 
         threading.Thread(
             target=_trigger_processing,
             args=(sess["telegram_id"], dest, filename),
             daemon=True,
         ).start()
-        logger.info(f"Web upload complete: {filename} ({len(content)} bytes) token={token}")
 
     def _send_text(self, text: str, status: int = 200) -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", "text/plain")
-        self.send_header("Content-Length", str(len(text)))
-        self.end_headers()
-        self.wfile.write(text.encode())
+        try:
+            body = text.encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception:
+            pass
 
     def _send_html(self, html: str, status: int = 200) -> None:
-        body = html.encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            body = html.encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception:
+            pass
+
+    def _send_error(self, message: str) -> None:
+        try:
+            body = f"Error: {message}".encode()
+            self.send_response(500)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception:
+            pass
 
     def log_message(self, fmt: str, *args) -> None:
         logger.debug(f"WEB: {fmt % args}")
 
-    @staticmethod
-    def _upload_page(token: str) -> str:
-        return f"""<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Upload Project</title>
-<style>
-  body{{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:600px;margin:40px auto;padding:0 20px;color:#333}}
-  h1{{font-size:1.5rem}} .note{{color:#666;font-size:0.9rem}}
-  input[type=file]{{display:block;margin:1rem 0}}
-  button{{padding:10px 24px;background:#007bff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:1rem}}
-  button:hover{{background:#0056b3}}
-</style></head>
-<body>
-<h1>📤 Upload Project</h1>
-<p>Select a ZIP file to upload.</p>
-<form method="post" enctype="multipart/form-data" action="/upload/{token}">
-  <input type="file" name="file" accept=".zip" required>
-  <button type="submit">Upload</button>
-</form>
-<p class="note">Maximum file size: 2 GB</p>
-</body></html>"""
-
-    @staticmethod
-    def _success_page(token: str) -> str:
-        return """<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Upload Complete</title>
-<style>
-  body{{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:600px;margin:40px auto;padding:0 20px;color:#333;text-align:center}}
-  h1{{font-size:1.5rem;color:#28a745}} .note{{color:#666;font-size:0.9rem}}
-</style></head>
-<body>
-<h1>✅ Upload Complete!</h1>
-<p>The bot is now processing your project. Check Telegram for updates.</p>
-<p class="note">You can close this page.</p>
-</body></html>"""
-
 
 def start_upload_server(port: int) -> None:
     server = http.server.HTTPServer(("0.0.0.0", port), UploadHTTPHandler)
+    server.timeout = 120
     logger.info(f"Upload server listening on port {port}")
     server.serve_forever()
