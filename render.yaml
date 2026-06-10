@@ -1,5 +1,5 @@
 services:
-  - type: worker
+  - type: web
     name: BOT_TEL
     env: python
     buildCommand: pip install -r requirements.txt
