@@ -10,6 +10,24 @@ STORAGE_DIR = os.path.join("storage", "repo_backup")
 DB_SOURCE = os.path.join("database", "bot.db")
 DB_FILE = "bot.db"
 
+STORAGE_REPO_NAME = "gitsync-bot-storage"
+
+
+def _default_storage_url() -> str:
+    try:
+        from git import Repo
+        repo = Repo(os.getcwd())
+        origin = repo.remotes.origin
+        url = origin.url
+        if "github.com" in url:
+            parts = url.rstrip(".git").split("github.com/")
+            if len(parts) == 2:
+                owner = parts[1].split("/")[0]
+                return f"https://github.com/{owner}/{STORAGE_REPO_NAME}.git"
+    except Exception:
+        pass
+    return ""
+
 
 class StorageRepo:
     _instance = None
@@ -27,16 +45,16 @@ class StorageRepo:
         if self._initialized:
             return
         self._initialized = True
-        self._repo_url = os.environ.get("STORAGE_REPO_URL", "")
+        self._repo_url = os.environ.get("STORAGE_REPO_URL", "") or _default_storage_url()
         self._token = os.environ.get("STORAGE_REPO_TOKEN", "")
         self._enabled = bool(self._repo_url and self._token)
         self._dirty = False
         self._timer: threading.Timer = None
         self._repo: "Repo" = None
         if self._enabled:
-            logger.info("Storage repo backup is ENABLED.")
+            logger.info(f"Storage repo backup ENABLED → {self._repo_url}")
         else:
-            logger.info("Storage repo backup is DISABLED (set STORAGE_REPO_URL and STORAGE_REPO_TOKEN).")
+            logger.info("Storage repo backup DISABLED (set STORAGE_REPO_TOKEN).")
 
     def _auth_url(self) -> str:
         return self._repo_url.replace("https://", f"https://{self._token}@")
