@@ -396,6 +396,15 @@ class Database:
             "failed_syncs": self.get_failed_syncs(),
         }
 
+    def reconnect(self) -> None:
+        if hasattr(self, "conn") and self.conn:
+            try:
+                self.conn.close()
+            except Exception:
+                pass
+        self._initialized = False
+        self.__init__()
+
     def ensure_tables(self) -> None:
         self._init_schema()
 
