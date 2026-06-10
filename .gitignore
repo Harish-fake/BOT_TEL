@@ -13,8 +13,7 @@ node_modules/
 Thumbs.db
 desktop.ini
 database/bot.db*
-storage/projects/
-storage/logs/
-storage/temp/
+database/apscheduler.db*
+storage/
 *.db-shm
 *.db-wal

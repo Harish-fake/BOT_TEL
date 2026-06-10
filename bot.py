@@ -53,6 +53,7 @@ from services.encryption_service import EncryptionService
 from services.report_service import ReportService
 from services.file_service import FileService
 from services.file_tracker import FileTracker
+from services.storage_repo import storage_repo
 import time
 from datetime import datetime
 from typing import Optional
@@ -426,6 +427,13 @@ def main() -> None:
         logger.critical("BOT_TOKEN not set! Create a .env file with BOT_TOKEN=<your_token>")
         sys.exit(1)
 
+    # Restore database from storage repo if available
+    db_restored = storage_repo.restore()
+    if db_restored:
+        logger.info("Database restored from GitHub storage repo.")
+    else:
+        logger.info("Starting with fresh or existing local database.")
+
     scheduler_manager.set_sync_callback(scheduled_sync)
 
     async def _keep_alive() -> None:
@@ -455,8 +463,9 @@ def main() -> None:
     async def post_init(app: Application) -> None:
         scheduler_manager.start()
         scheduler_manager.reschedule_all()
+        storage_repo.start_periodic_backup()
         asyncio.ensure_future(_keep_alive())
-        logger.info("Scheduler started and jobs rescheduled.")
+        logger.info("Scheduler started, jobs rescheduled, storage backup active.")
 
     application = (
         Application.builder()
@@ -525,10 +534,10 @@ def main() -> None:
             project_id = db.add_project(user_db["id"], project_name, extract_path)
             report = ReportService.analysis_report(
                 project_name,
-                analysis["files"],
-                analysis["folders"],
-                analysis["loc"],
-                analysis["technologies"],
+                analysis.get("files", 0),
+                analysis.get("folders", 0),
+                analysis.get("loc", 0),
+                analysis.get("technologies", []),
             )
 
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup

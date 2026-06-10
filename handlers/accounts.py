@@ -37,11 +37,11 @@ async def accounts_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     text = "*Linked GitHub Accounts*\n\n"
     keyboard = []
     for a in accounts:
-        text += f"  `{a['account_alias']}` — {a['github_username']}\n"
+        text += f"  `{a.get('account_alias', '?')}` — {a.get('github_username', '?')}\n"
         keyboard.append([
             InlineKeyboardButton(
-                f"🗑 Remove {a['account_alias']}",
-                callback_data=f"del_account:{a['id']}",
+                f"🗑 Remove {a.get('account_alias', '?')}",
+                callback_data=f"del_account:{a.get('id', 0)}",
             )
         ])
     keyboard.append([InlineKeyboardButton("➕ Add Account", callback_data="add_account")])
@@ -142,7 +142,7 @@ async def delete_account_callback(update: Update, context: ContextTypes.DEFAULT_
             ]
         ]
         await query.edit_message_text(
-            f"🗑 Remove GitHub account *{account['account_alias']}* ({account['github_username']})?\n\n"
+            f"🗑 Remove GitHub account *{account.get('account_alias', '?')}* ({account.get('github_username', '?')})?\n\n"
             "Projects linked to this account will be unlinked.",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard),

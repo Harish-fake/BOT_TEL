@@ -48,7 +48,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def show_project_status(update: Update, project: dict) -> None:
     schedule = db.get_schedule_by_project(project["id"])
-    cron_expr = schedule["cron_expression"] if schedule else project.get("schedule_time")
+    cron_expr = schedule.get("cron_expression") if schedule else project.get("schedule_time")
     schedule_desc = ScheduleService.describe_cron(cron_expr) if cron_expr else None
     paused = bool(schedule and not schedule.get("enabled", 1))
 
@@ -88,8 +88,8 @@ async def show_project_status(update: Update, project: dict) -> None:
     if logs:
         report += "\n\n*Recent Syncs:*"
         for log in logs:
-            status_icon = "✅" if log["status"] == "success" else "❌"
-            ts_raw = log["created_at"]
+            status_icon = "✅" if log.get("status") == "success" else "❌"
+            ts_raw = log.get("created_at", "")
             ts = str(ts_raw)
             try:
                 dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))

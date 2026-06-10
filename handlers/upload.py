@@ -141,10 +141,10 @@ async def receive_zip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
     report = ReportService.analysis_report(
         project_name,
-        analysis["files"],
-        analysis["folders"],
-        analysis["loc"],
-        analysis["technologies"],
+        analysis.get("files", 0),
+        analysis.get("folders", 0),
+        analysis.get("loc", 0),
+        analysis.get("technologies", []),
     )
 
     keyboard = [

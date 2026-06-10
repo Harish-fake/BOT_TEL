@@ -22,9 +22,13 @@ def now_ist() -> str:
 logger = logging.getLogger(__name__)
 
 import os
-JOB_STORE_URL = os.environ.get("DATABASE_URL") or "sqlite:///database/apscheduler.db"
-if JOB_STORE_URL.startswith("postgres://"):
-    JOB_STORE_URL = "postgresql" + JOB_STORE_URL[len("postgres"):]
+from config import config
+if os.environ.get("DATABASE_URL"):
+    JOB_STORE_URL = os.environ.get("DATABASE_URL")
+    if JOB_STORE_URL.startswith("postgres://"):
+        JOB_STORE_URL = "postgresql" + JOB_STORE_URL[len("postgres"):]
+else:
+    JOB_STORE_URL = f"sqlite:///{config.DATABASE_PATH}"
 
 # Module-level callback registry so APScheduler doesn't try to pickle a
 # scheduler instance when serializing job references.
@@ -126,9 +130,9 @@ class SchedulerManager:
     def reschedule_all(self) -> None:
         schedules = db.get_all_enabled_schedules()
         for sched in schedules:
-            project_id = sched["project_id"]
-            expr = sched["cron_expression"]
-            if expr:
+            project_id = sched.get("project_id")
+            expr = sched.get("cron_expression")
+            if project_id and expr:
                 self.add_job(project_id, expr)
         logger.info(f"Rescheduled {len(schedules)} jobs from database.")
 

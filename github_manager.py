@@ -41,7 +41,7 @@ class GitHubManager:
 
         # Ensure at least one commit exists so 'main' branch is valid
         if not GitHubManager._has_commits(repo):
-            techs = ProjectAnalyzer().analyze(project_path)["technologies"]
+            techs = ProjectAnalyzer().analyze(project_path).get("technologies", [])
             gitignore_content = ProjectAnalyzer.generate_gitignore(techs)
             gitignore_path = os.path.join(project_path, ".gitignore")
             with open(gitignore_path, "w") as f:
