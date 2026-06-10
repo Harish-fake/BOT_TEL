@@ -430,6 +430,7 @@ def main() -> None:
 
     # Restore database from storage repo if available
     db_restored = storage_repo.restore()
+    db.ensure_tables()
     if db_restored:
         logger.info("Database restored from GitHub storage repo.")
     else:

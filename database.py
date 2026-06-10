@@ -396,6 +396,9 @@ class Database:
             "failed_syncs": self.get_failed_syncs(),
         }
 
+    def ensure_tables(self) -> None:
+        self._init_schema()
+
     def close(self) -> None:
         if hasattr(self, '_storage_repo') and self._storage_repo:
             self._storage_repo.mark_dirty()
